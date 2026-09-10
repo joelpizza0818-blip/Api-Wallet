@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom';
-import logo from '../../assets/logo.svg';
+import { LogoIcon } from '../../components/common/Logo/Logo';
 import Card from '../../components/ui/Card';
-import ThemeToggle from '../../components/common/ThemeToggle/ThemeToggle';
 import UserProfileBubble from '../../components/common/UserProfileBubble/UserProfileBubble';
 import { useAuth } from '../../features/auth/AuthContext';
 import './LandingPage.css';
@@ -110,7 +109,7 @@ function LandingPage() {
       <header className="landing__header">
         <div className="container landing__header-inner">
           <div className="landing__brand">
-            <img src={logo} alt="API-Wallet logo" className="landing__logo" />
+            <LogoIcon size={28} className="landing__logo" />
             <span className="landing__brand-name">API-Wallet</span>
           </div>
 
@@ -138,7 +137,6 @@ function LandingPage() {
                 <Link className="btn btn--primary btn--sm" to="/register">Regístrate</Link>
               </>
             )}
-            <ThemeToggle />
           </nav>
         </div>
       </header>
@@ -220,7 +218,7 @@ function LandingPage() {
       <footer className="landing__footer">
         <div className="container landing__footer-inner">
           <div className="landing__brand">
-            <img src={logo} alt="API-Wallet logo" className="landing__logo landing__logo--sm" />
+            <LogoIcon size={24} className="landing__logo landing__logo--sm" />
             <span className="landing__brand-name landing__brand-name--sm">API-Wallet</span>
           </div>
           <p className="landing__footer-copy">

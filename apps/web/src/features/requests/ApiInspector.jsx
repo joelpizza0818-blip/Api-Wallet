@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useWorkspace } from '../workspaces/WorkspaceContext';
 import './ApiInspector.css';
 
 function ApiInspector({ api }) {
-  const { updateApi } = useWorkspace();
+  const { updateApi, addConsoleLog } = useWorkspace();
   const [method, setMethod] = useState(api.method || 'GET');
-  const [url, setUrl] = useState(api.url || '');
+  const [url, setUrl] = useState(api.url || api.path || '');
   const [activeTab, setActiveTab] = useState('params');
   const [bodyContent, setBodyContent] = useState(api.body || '');
   const [isLoading, setIsLoading] = useState(false);
@@ -21,12 +21,41 @@ function ApiInspector({ api }) {
   const [preRequestScript, setPreRequestScript] = useState(api.preRequestScript || api.collectionPreRequestScript || '');
   const [testScript, setTestScript] = useState(api.testScript || api.collectionTestScript || '');
   const [saveMessage, setSaveMessage] = useState('');
+  const [scriptSubTab, setScriptSubTab] = useState('pre'); // 'pre' | 'post'
+  const [showSnippets, setShowSnippets] = useState(false);
 
-  const runScript = (source, pm) => {
+  const insertSnippet = (snippetText) => {
+    if (scriptSubTab === 'pre') {
+      setPreRequestScript((prev) => (prev ? `${prev}\n${snippetText}` : snippetText));
+    } else {
+      setTestScript((prev) => (prev ? `${prev}\n${snippetText}` : snippetText));
+    }
+  };
+
+  useEffect(() => {
+    if (!api) return;
+    setMethod(api.method || 'GET');
+    setUrl(api.url || api.path || '');
+    setBodyContent(api.body || '');
+    setResponse(api.responseSample || '');
+    setResponseMeta({
+      status: api.status || 'Ready',
+      time: '--',
+      size: '--',
+    });
+    setAuthorization({ type: 'none', ...(api.collectionAuthorization || {}), ...(api.authorization || {}) });
+    setPreRequestScript(api.preRequestScript || api.collectionPreRequestScript || '');
+    setTestScript(api.testScript || api.collectionTestScript || '');
+    setSaveMessage('');
+  }, [api]);
+
+  const runScript = (source, pm, scriptName = 'Script') => {
     if (!source.trim()) return;
     try {
       new Function('pm', source)(pm);
+      if (addConsoleLog) addConsoleLog({ type: 'script', text: `[Script OK] ${scriptName} ejecutado correctamente.` });
     } catch (error) {
+      if (addConsoleLog) addConsoleLog({ type: 'error', text: `[Script Error] ${scriptName}: ${error.message}` });
       setResponse(JSON.stringify({ scriptError: error.message }, null, 2));
       setResponseMeta((previous) => ({ ...previous, status: 'Script Error' }));
     }
@@ -64,9 +93,29 @@ function ApiInspector({ api }) {
         time: `${Math.round(performance.now() - startedAt)} ms`,
         size: `${new Blob([text]).size} B`,
       });
+      if (addConsoleLog) {
+        addConsoleLog({
+          type: result.ok ? 'info' : 'error',
+          method,
+          url: targetUrl,
+          status: `${result.status} ${result.statusText}`,
+          time: `${Math.round(performance.now() - startedAt)}ms`,
+          size: `${new Blob([text]).size} B`,
+          text: `${method} ${targetUrl} -> ${result.status} ${result.statusText} (${Math.round(performance.now() - startedAt)}ms)`,
+        });
+      }
       const test = (name, passed) => { if (!passed) throw new Error(name || 'Test failed'); };
-      runScript(testScript, { test, expect: (value, message) => ({ to: { eql: (expected) => { if (value !== expected) throw new Error(message || `Expected ${value} to equal ${expected}`); } } }), response: { status: result.status, code: result.status, body: text, text: () => text } });
+      runScript(testScript, { test, expect: (value, message) => ({ to: { eql: (expected) => { if (value !== expected) throw new Error(message || `Expected ${value} to equal ${expected}`); } } }), response: { status: result.status, code: result.status, body: text, text: () => text } }, 'Post-response Test');
     } catch (error) {
+      if (addConsoleLog) {
+        addConsoleLog({
+          type: 'error',
+          method,
+          url,
+          status: 'Error',
+          text: `[Error] ${method} ${url}: ${error.message}`,
+        });
+      }
       setResponse(JSON.stringify({ error: error.message }, null, 2));
       setResponseMeta({ status: 'Error', time: `${Math.round(performance.now() - startedAt)} ms`, size: '--' });
     } finally {
@@ -226,7 +275,88 @@ function ApiInspector({ api }) {
           </div>
         )}
 
-        {activeTab === 'scripts' && <div className="wb-body-panel"><label>Before request<textarea className="wb-body-textarea" rows={6} value={preRequestScript} onChange={(event) => setPreRequestScript(event.target.value)} placeholder="pm.variables = { token: '...' };" /></label><label>After response<textarea className="wb-body-textarea" rows={6} value={testScript} onChange={(event) => setTestScript(event.target.value)} placeholder="pm.expect(pm.response.status).to.eql(200);" /></label></div>}
+        {activeTab === 'scripts' && (
+          <div className="wb-scripts-layout">
+            <div className="wb-scripts-sidebar">
+              <button
+                type="button"
+                className={`wb-scripts-subtab ${scriptSubTab === 'pre' ? 'wb-scripts-subtab--active' : ''}`}
+                onClick={() => setScriptSubTab('pre')}
+              >
+                Before request
+              </button>
+              <button
+                type="button"
+                className={`wb-scripts-subtab ${scriptSubTab === 'post' ? 'wb-scripts-subtab--active' : ''}`}
+                onClick={() => setScriptSubTab('post')}
+              >
+                After response
+              </button>
+            </div>
+
+            <div className="wb-scripts-editor-pane">
+              <div className="wb-scripts-editor-wrap">
+                <div className="wb-scripts-gutter">
+                  {(scriptSubTab === 'pre' ? preRequestScript : testScript)
+                    .split('\n')
+                    .map((_, i) => (
+                      <span key={i} className="wb-scripts-line-num">{i + 1}</span>
+                    ))}
+                </div>
+                <textarea
+                  className="wb-scripts-textarea"
+                  value={scriptSubTab === 'pre' ? preRequestScript : testScript}
+                  onChange={(e) => scriptSubTab === 'pre' ? setPreRequestScript(e.target.value) : setTestScript(e.target.value)}
+                  placeholder={
+                    scriptSubTab === 'pre'
+                      ? '// Use JavaScript to configure this request dynamically.\n// Example: pm.variables.set("token", "12345");'
+                      : '// Use JavaScript to write tests, visualize response, and more.\n// Example: pm.test("Status is 200", () => pm.expect(pm.response.code).to.eql(200));'
+                  }
+                  rows={10}
+                />
+              </div>
+
+              <div className="wb-scripts-footer-bar">
+                <button
+                  type="button"
+                  className="wb-snippets-trigger-btn"
+                  onClick={() => setShowSnippets(!showSnippets)}
+                >
+                  <code>&lt;/&gt;</code> Snippets {showSnippets ? '▲' : '▼'}
+                </button>
+              </div>
+
+              {showSnippets && (
+                <div className="wb-snippets-popover">
+                  <div className="wb-snippets-popover-header">
+                    <span>Insertar Snippet</span>
+                    <button type="button" className="wb-snippets-close-btn" onClick={() => setShowSnippets(false)}>✕</button>
+                  </div>
+                  <div className="wb-snippets-popover-list">
+                    <button type="button" onClick={() => insertSnippet('pm.variables.set("variable_key", "variable_value");')}>
+                      Set a variable
+                    </button>
+                    <button type="button" onClick={() => insertSnippet('const value = pm.variables.get("variable_key");')}>
+                      Get a variable
+                    </button>
+                    <button type="button" onClick={() => insertSnippet('pm.test("Status code is 200", () => {\n  pm.expect(pm.response.code).to.eql(200);\n});')}>
+                      Status code: Code is 200
+                    </button>
+                    <button type="button" onClick={() => insertSnippet('pm.test("Response body contains string", () => {\n  pm.expect(pm.response.text()).to.include("string_to_check");\n});')}>
+                      Response body: Contains string
+                    </button>
+                    <button type="button" onClick={() => insertSnippet('const jsonData = JSON.parse(pm.response.body);\npm.expect(jsonData.status).to.eql("success");')}>
+                      Response body: JSON value check
+                    </button>
+                    <button type="button" onClick={() => insertSnippet('pm.request.headers.add({ key: "X-Run-Id", value: Date.now().toString() });')}>
+                      Add header to request
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {activeTab === 'headers' && (
           <div className="wb-table-wrap">

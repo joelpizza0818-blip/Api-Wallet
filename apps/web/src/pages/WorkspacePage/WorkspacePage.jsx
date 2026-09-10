@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useFeedback } from '../../components/common/Feedback/FeedbackContext';
 import FlowsView from '../../features/requests/FlowsView';
 import { CollectionsView, DocumentsView, EnvironmentsView, LineHistoryView, MocksView } from '../../features/workspaces/ArtifactViewsPro';
@@ -8,6 +8,7 @@ import ApiKeysView from '../../features/secrets/ApiKeysView';
 import WorkspaceOverview from '../../features/workspaces/WorkspaceOverview';
 import ApiInspector from '../../features/requests/ApiInspector';
 import TopBar from '../../features/workspaces/TopBar';
+import TerminalDrawer from '../../components/common/TerminalDrawer/TerminalDrawer';
 import { useWorkspace } from '../../features/workspaces/WorkspaceContext';
 import {
   NewKeyModal,
@@ -33,8 +34,19 @@ function WorkspacePage() {
   ]);
   const [activeTabId, setActiveTabId] = useState('tab-overview');
 
-  // Settings Drawer state
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isTerminalOpen, setIsTerminalOpen] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'j') {
+        e.preventDefault();
+        setIsTerminalOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // Modal dialog states
   const [isNewKeyModalOpen, setIsNewKeyModalOpen] = useState(false);
@@ -57,6 +69,14 @@ function WorkspacePage() {
         ...prev,
         { id: `api-${api.id}`, title: api.name, method: api.method, type: 'api-detail', data: api },
       ]);
+    } else {
+      setOpenTabs((prev) =>
+        prev.map((t) =>
+          t.id === `api-${api.id}`
+            ? { ...t, title: api.name, method: api.method, data: api }
+            : t
+        )
+      );
     }
     setActiveTabId(`api-${api.id}`);
   };
@@ -121,7 +141,10 @@ function WorkspacePage() {
     setActiveTabId(tab.id);
     setActiveView(tab.type);
     if (tab.type === 'api-detail') {
-      setSelectedApi(tab.data);
+      const freshApi = collections
+        .flatMap((col) => col.apis || [])
+        .find((a) => a.id === tab.data?.id);
+      setSelectedApi(freshApi || tab.data);
     }
   };
 
@@ -249,7 +272,7 @@ function WorkspacePage() {
             {activeView === 'documents' && <DocumentsView />}
             {activeView === 'mocks' && <MocksView />}
             {activeView === 'history' && <LineHistoryView />}
-            {activeView === 'api-detail' && selectedApi && <ApiInspector api={selectedApi} />}
+            {activeView === 'api-detail' && selectedApi && <ApiInspector key={selectedApi.id} api={selectedApi} />}
           </div>
         </main>
       </div>
@@ -312,6 +335,36 @@ function WorkspacePage() {
         isOpen={isDeleteProjectModalOpen}
         onClose={() => setIsDeleteProjectModalOpen(false)}
       />
+
+      {/* Bottom Status Bar */}
+      <div className="wb-bottom-bar">
+        <div className="wb-bottom-bar-left">
+          <button
+            type="button"
+            className={`wb-bottom-bar-btn ${isTerminalOpen ? 'wb-bottom-bar-btn--active' : ''}`}
+            onClick={() => setIsTerminalOpen(!isTerminalOpen)}
+            title="Abrir terminal / consola (Ctrl+J)"
+          >
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
+              <polyline points="4 17 10 11 4 5" />
+              <line x1="12" y1="19" x2="20" y2="19" />
+            </svg>
+            <span>Terminal &amp; Consola</span>
+            <kbd className="wb-kbd-badge">Ctrl+J</kbd>
+          </button>
+          <span className="wb-status-indicator">
+            <span className="wb-status-dot" />
+            All systems are go!
+          </span>
+        </div>
+        <div className="wb-bottom-bar-right">
+          <span className="wb-bottom-stat">Globals</span>
+          <span className="wb-bottom-stat">Vault</span>
+          <span className="wb-bottom-stat">v1.0.0</span>
+        </div>
+      </div>
+
+      <TerminalDrawer isOpen={isTerminalOpen} onClose={() => setIsTerminalOpen(false)} />
     </div>
   );
 }

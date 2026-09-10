@@ -6,10 +6,10 @@ export const PRIMARY_THEMES = [
 ];
 
 export const ACCENT_COLORS = [
-  { id: 'purple', name: 'Morado', primary: '#7c3aed', hover: '#6d28d9', light: '#2e1065', lightBg: '#ede9fe' },
-  { id: 'blue', name: 'Azul Eléctrico', primary: '#2563eb', hover: '#1d4ed8', light: '#172554', lightBg: '#dbeafe' },
-  { id: 'emerald', name: 'Esmeralda', primary: '#059669', hover: '#047857', light: '#064e3b', lightBg: '#d1fae5' },
-  { id: 'amber', name: 'Ámbar', primary: '#d97706', hover: '#b45309', light: '#451a03', lightBg: '#fef3c7' },
-  { id: 'rose', name: 'Rosa Neón', primary: '#e11d48', hover: '#be123c', light: '#4c0519', lightBg: '#ffe4e6' },
-  { id: 'cyan', name: 'Cian', primary: '#0891b2', hover: '#0e7490', light: '#164e63', lightBg: '#cffafe' },
+  { id: 'purple', name: 'Morado', primary: '#7c3aed', hover: '#6d28d9', light: '#2e1065', lightBg: '#ede9fe', hue: 262, intensity: 100 },
+  { id: 'blue', name: 'Azul Eléctrico', primary: '#2563eb', hover: '#1d4ed8', light: '#172554', lightBg: '#dbeafe', hue: 221, intensity: 100 },
+  { id: 'emerald', name: 'Esmeralda', primary: '#059669', hover: '#047857', light: '#064e3b', lightBg: '#d1fae5', hue: 161, intensity: 100 },
+  { id: 'amber', name: 'Ámbar', primary: '#d97706', hover: '#b45309', light: '#451a03', lightBg: '#fef3c7', hue: 32, intensity: 100 },
+  { id: 'rose', name: 'Rosa Neón', primary: '#e11d48', hover: '#be123c', light: '#4c0519', lightBg: '#ffe4e6', hue: 347, intensity: 100 },
+  { id: 'cyan', name: 'Cian', primary: '#0891b2', hover: '#0e7490', light: '#164e63', lightBg: '#cffafe', hue: 189, intensity: 100 },
 ];

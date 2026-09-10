@@ -11,7 +11,7 @@
 .wb-main-container {
   display: flex;
   flex: 1;
-  height: calc(100vh - 48px);
+  height: calc(100vh - 48px - 28px);
   overflow: hidden;
   min-width: 0;
 }
@@ -187,3 +187,71 @@
   .wb-sidebar { min-width: 250px; }
   .wb-canvas { min-width: 620px; }
 }
+
+/* Bottom status bar */
+.wb-bottom-bar {
+  height: 28px;
+  background-color: var(--color-surface-alt);
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--spacing-3);
+  font-size: 11px;
+  color: var(--color-text-muted);
+  user-select: none;
+  z-index: 1000;
+}
+
+.wb-bottom-bar-left, .wb-bottom-bar-right {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3);
+}
+
+.wb-bottom-bar-btn {
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+}
+
+.wb-bottom-bar-btn:hover, .wb-bottom-bar-btn--active {
+  background-color: var(--color-surface);
+  color: var(--color-primary);
+}
+
+.wb-kbd-badge {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-size: 9px;
+  font-family: var(--font-family-mono);
+}
+
+.wb-status-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.wb-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #10b981;
+}
+
+.wb-bottom-stat {
+  font-size: 11px;
+}
+

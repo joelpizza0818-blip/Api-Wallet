@@ -21,6 +21,10 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
     setPrimaryTheme,
     accentColor,
     setAccentColor,
+    accentHue,
+    setAccentHue,
+    accentIntensity,
+    setAccentIntensity,
     restoreDefaultWorkspace,
     activeWorkspaceId,
   } = useWorkspace();
@@ -145,6 +149,12 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
     logout();
     onClose();
     navigate('/');
+  };
+
+  const handleAccentSelect = (accent) => {
+    setAccentColor(accent.id);
+    setAccentHue(accent.hue);
+    setAccentIntensity(accent.intensity);
   };
 
   return (
@@ -273,7 +283,7 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
                         key={accent.id}
                         type="button"
                         className={`wb-accent-swatch ${isSelected ? 'wb-accent-swatch--active' : ''}`}
-                        onClick={() => setAccentColor(accent.id)}
+                        onClick={() => handleAccentSelect(accent)}
                         title={accent.name}
                       >
                         <span
@@ -286,6 +296,32 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
                       </button>
                     );
                   })}
+                </div>
+
+                <div className="wb-accent-controls">
+                  <label className="wb-range-control">
+                    <span><span>Matiz</span><output>{accentHue}°</output></span>
+                    <input
+                      className="wb-range-control__hue"
+                      type="range"
+                      min="0"
+                      max="360"
+                      value={accentHue}
+                      onChange={(event) => setAccentHue(Number(event.target.value))}
+                      style={{ '--range-value': `${(accentHue / 360) * 100}%` }}
+                    />
+                  </label>
+                  <label className="wb-range-control">
+                    <span><span>Intensidad y opacidad</span><output>{accentIntensity}%</output></span>
+                    <input
+                      type="range"
+                      min="20"
+                      max="100"
+                      value={accentIntensity}
+                      onChange={(event) => setAccentIntensity(Number(event.target.value))}
+                      style={{ '--range-value': `${((accentIntensity - 20) / 80) * 100}%` }}
+                    />
+                  </label>
                 </div>
               </div>
 

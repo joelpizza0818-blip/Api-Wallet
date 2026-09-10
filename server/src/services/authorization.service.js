@@ -29,4 +29,12 @@ async function collectionAccess(userId, collectionId, roles = null) {
   return collection;
 }
 
-module.exports = { WRITE_ROLES, ADMIN_ROLES, requireWorkspaceRole, projectAccess, collectionAccess };
+const ROLE_DESCRIPTIONS = {
+  OWNER: 'Full control, can manage members and settings',
+  ADMIN: 'Can edit workspace settings and theme',
+  DEVELOPER: 'Can create/update projects and collections',
+  QA: 'Can run tests and view reports',
+  VIEWER: 'Read‑only access'
+};
+
+module.exports = { WRITE_ROLES, ADMIN_ROLES, ROLE_DESCRIPTIONS, requireWorkspaceRole, projectAccess, collectionAccess };

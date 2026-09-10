@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { useWorkspace } from '../workspaces/WorkspaceContext';
+import { useFeedback } from '../../components/common/Feedback/FeedbackContext';
 import './ApiKeysView.css';
 
 function ApiKeysView({ onOpenNewKeyModal }) {
   const { apiKeys, environments, deleteApiKey } = useWorkspace();
+  const { notify, confirm } = useFeedback();
   const [revealedKeys, setRevealedKeys] = useState({});
   const [copiedKeyId, setCopiedKeyId] = useState(null);
 
@@ -21,11 +23,30 @@ function ApiKeysView({ onOpenNewKeyModal }) {
     setTimeout(() => setCopiedKeyId(null), 2000);
   };
 
+  const handleRevoke = (keyId, keyName) => {
+    confirm({
+      title: 'Revocar API Key',
+      message: `¿Estás seguro de que deseas revocar "${keyName}"? Esta clave dejará de funcionar inmediatamente.`,
+      confirmText: 'Sí, revocar clave',
+      cancelText: 'Cancelar',
+      onConfirm: async () => {
+        try {
+          await deleteApiKey(keyId);
+          notify('API Key revocada exitosamente.');
+        } catch (error) {
+          notify(error.message || 'No se pudo revocar la API Key.', 'error');
+        }
+      },
+    });
+  };
+
   const formatKeyDisplay = (keyText, isRevealed) => {
     if (isRevealed) return keyText;
     const prefix = keyText.substring(0, 10);
     return `${prefix}••••••••••••••••••••••••`;
   };
+
+  const activeKeys = apiKeys.filter((key) => key.status !== 'REVOKED');
 
   return (
     <div className="wb-keys-view">
@@ -56,7 +77,7 @@ function ApiKeysView({ onOpenNewKeyModal }) {
       <div className="wb-keys-metrics-grid">
         <div className="wb-metric-card">
           <span className="wb-metric-label">Total de Claves</span>
-          <span className="wb-metric-value">{apiKeys.length}</span>
+          <span className="wb-metric-value">{activeKeys.length}</span>
           <span className="wb-metric-sub">Activas en el workspace</span>
         </div>
 
@@ -68,7 +89,7 @@ function ApiKeysView({ onOpenNewKeyModal }) {
 
         <div className="wb-metric-card">
           <span className="wb-metric-label">Seguridad</span>
-          <span className="wb-metric-value text-success">{apiKeys.filter((key) => key.status === 'ACTIVE').length}</span>
+          <span className="wb-metric-value text-success">{activeKeys.length}</span>
           <span className="wb-metric-sub">Claves activas</span>
         </div>
       </div>
@@ -77,10 +98,10 @@ function ApiKeysView({ onOpenNewKeyModal }) {
       <div className="wb-keys-table-container">
         <div className="wb-keys-table-header">
           <h3>Claves de Acceso Activas</h3>
-          <span className="wb-keys-count">{apiKeys.length} registradas</span>
+          <span className="wb-keys-count">{activeKeys.length} registradas</span>
         </div>
 
-        {apiKeys.length === 0 ? (
+        {activeKeys.length === 0 ? (
           <div className="wb-empty-keys">
             <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M14.5 9.5a5 5 0 1 0-1.6 3.7l6.1 6.1a1.5 1.5 0 0 0 2.1 0l.2-.2a1.5 1.5 0 0 0 0-2.1l-1.1-1.1 1.1-1.1a1.5 1.5 0 0 0 0-2.1l-.2-.2a1.5 1.5 0 0 0-2.1 0l-1.1 1.1-1.8-1.8A5 5 0 0 0 14.5 9.5Z" />
@@ -97,12 +118,13 @@ function ApiKeysView({ onOpenNewKeyModal }) {
           </div>
         ) : (
           <div className="wb-keys-list">
-            {apiKeys.map((keyItem) => {
+            {activeKeys.map((keyItem) => {
               const isRevealed = !!revealedKeys[keyItem.id];
               const isCopied = copiedKeyId === keyItem.id;
+              const isRevoked = keyItem.status === 'REVOKED';
 
               return (
-                <div key={keyItem.id} className="wb-key-row-card">
+                <div key={keyItem.id} className={`wb-key-row-card ${isRevoked ? 'wb-key-row-card--revoked' : ''}`}>
                   <div className="wb-key-card-left">
                     <div className="wb-key-meta">
                       <span className="wb-key-title">{keyItem.name}</span>
@@ -110,6 +132,7 @@ function ApiKeysView({ onOpenNewKeyModal }) {
                         {keyItem.prefix === 'sk_live' ? 'Producción' : 'Staging / Dev'}
                       </span>
                       <span className="wb-key-scope-badge">{(keyItem.scopes || []).join(', ') || 'Sin scopes'}</span>
+                      {isRevoked && <span className="wb-key-status-badge wb-status-revoked">Revocada</span>}
                     </div>
 
                     <div className="wb-key-token-box">
@@ -122,6 +145,7 @@ function ApiKeysView({ onOpenNewKeyModal }) {
                         className="wb-key-action-btn"
                         onClick={() => toggleReveal(keyItem.id)}
                         title={isRevealed ? 'Ocultar token' : 'Revelar token'}
+                        disabled={isRevoked}
                       >
                         {isRevealed ? (
                           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
@@ -139,7 +163,7 @@ function ApiKeysView({ onOpenNewKeyModal }) {
                       <button
                         type="button"
                         className={`wb-key-copy-btn ${isCopied ? 'wb-key-copy-btn--copied' : ''}`}
-                        onClick={() => handleCopy(keyItem.id, keyItem.key)} disabled={!keyItem.key}
+                        onClick={() => handleCopy(keyItem.id, keyItem.key)} disabled={!keyItem.key || isRevoked}
                         title="Copiar API Key al portapapeles"
                       >
                         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2">
@@ -160,15 +184,16 @@ function ApiKeysView({ onOpenNewKeyModal }) {
                   <div className="wb-key-card-right">
                     <button
                       type="button"
-                      className="wb-revoke-key-btn"
-                      onClick={() => deleteApiKey(keyItem.id)}
-                      title="Revocar y eliminar esta API Key"
+                      className={`wb-revoke-key-btn ${isRevoked ? 'wb-revoke-key-btn--disabled' : ''}`}
+                      onClick={() => !isRevoked && handleRevoke(keyItem.id, keyItem.name)}
+                      disabled={isRevoked}
+                      title={isRevoked ? 'Esta clave ya ha sido revocada' : 'Revocar y desactivar esta API Key'}
                     >
                       <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
                         <polyline points="3 6 5 6 21 6" />
                         <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                       </svg>
-                      Revocar
+                      {isRevoked ? 'Revocada' : 'Revocar'}
                     </button>
                   </div>
                 </div>

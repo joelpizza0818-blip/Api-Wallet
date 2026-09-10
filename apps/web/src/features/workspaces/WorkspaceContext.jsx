@@ -24,6 +24,20 @@ export function WorkspaceProvider({ children }) {
       return 'purple';
     }
   });
+  const [accentHue, setAccentHue] = useState(() => {
+    try {
+      return Number(JSON.parse(localStorage.getItem(THEME_PREF_KEY) || '{}').accentHue) || 262;
+    } catch {
+      return 262;
+    }
+  });
+  const [accentIntensity, setAccentIntensity] = useState(() => {
+    try {
+      return Number(JSON.parse(localStorage.getItem(THEME_PREF_KEY) || '{}').accentIntensity) || 100;
+    } catch {
+      return 100;
+    }
+  });
   const [collections, setCollections] = useState([]);
   const [projects, setProjects] = useState([]);
   const [apiKeys, setApiKeys] = useState([]);
@@ -34,6 +48,18 @@ export function WorkspaceProvider({ children }) {
   const [workspaceName, setWorkspaceName] = useState('');
   const [activeWorkspaceId, setActiveWorkspaceId] = useState(null);
   const [activeProjectId, setActiveProjectId] = useState(null);
+  const [consoleLogs, setConsoleLogs] = useState([
+    { id: '1', type: 'info', text: 'API Wallet Console lista. Presiona Ctrl + J para abrir la terminal.', timestamp: new Date().toLocaleTimeString() }
+  ]);
+
+  const addConsoleLog = (log) => {
+    const entry = typeof log === 'string'
+      ? { id: String(Date.now() + Math.random()), type: 'info', text: log, timestamp: new Date().toLocaleTimeString() }
+      : { id: String(Date.now() + Math.random()), type: 'info', timestamp: new Date().toLocaleTimeString(), ...log };
+    setConsoleLogs((prev) => [...prev, entry]);
+  };
+
+  const clearConsoleLogs = () => setConsoleLogs([]);
 
   const loadWorkspace = async (workspaceId) => {
     const projectsResponse = await fetch(`${API_URL}/api/workspaces/${workspaceId}/projects`, { credentials: 'include' });
@@ -66,6 +92,13 @@ export function WorkspaceProvider({ children }) {
   useEffect(() => {
     const theme = PRIMARY_THEMES.find((item) => item.id === primaryTheme) || PRIMARY_THEMES[0];
     const accent = ACCENT_COLORS.find((item) => item.id === accentColor) || ACCENT_COLORS[0];
+    const saturation = 30 + (accentIntensity * 0.55);
+    const lightness = 70 - (accentIntensity * 0.15);
+    const opacity = 0.35 + (accentIntensity * 0.0065);
+    const accentValue = `hsla(${accentHue}, ${saturation}%, ${lightness}%, ${opacity})`;
+    const accentHoverValue = `hsla(${accentHue}, ${saturation}%, ${Math.max(lightness - 8, 25)}%, ${opacity})`;
+    const accentLightValue = `hsla(${accentHue}, ${saturation}%, ${theme.isDark ? 25 : 90}%, ${theme.isDark ? 0.45 : 0.3})`;
+    const solidAccent = `hsl(${accentHue}, ${Math.min(95, Math.max(50, saturation))}%, ${Math.min(65, Math.max(38, lightness))}%)`;
     const root = document.documentElement;
     root.setAttribute('data-theme', theme.isDark ? 'dark' : 'light');
     root.setAttribute('data-workspace-theme', theme.id);
@@ -75,11 +108,27 @@ export function WorkspaceProvider({ children }) {
     root.style.setProperty('--color-surface-alt', theme.surfaceAlt);
     root.style.setProperty('--color-border', theme.border);
     root.style.setProperty('--color-text', theme.text);
-    root.style.setProperty('--color-primary', accent.primary);
-    root.style.setProperty('--color-primary-hover', accent.hover);
-    root.style.setProperty('--color-primary-light', theme.isDark ? accent.light : accent.lightBg);
-    localStorage.setItem(THEME_PREF_KEY, JSON.stringify({ primaryTheme: theme.id, accentColor: accent.id }));
-  }, [primaryTheme, accentColor]);
+    root.style.setProperty('--color-primary', accentValue);
+    root.style.setProperty('--color-primary-hover', accentHoverValue);
+    root.style.setProperty('--color-primary-light', accentLightValue);
+    root.style.setProperty('--logo-fill', solidAccent);
+
+    // Update dynamic browser tab favicon with the workspace accent color
+    try {
+      const svgFavicon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="10" fill="${solidAccent}"/><rect x="7" y="14" width="26" height="18" rx="3" fill="white" opacity="0.18"/><rect x="7" y="14" width="26" height="18" rx="3" stroke="white" stroke-width="1.8"/><path d="M7 18h26V14a3 3 0 0 0-3-3H10a3 3 0 0 0-3 3v4z" fill="white" opacity="0.28"/><rect x="23" y="19" width="8" height="8" rx="2" fill="white" opacity="0.35"/><rect x="23" y="19" width="8" height="8" rx="2" stroke="white" stroke-width="1.2"/><circle cx="27" cy="23" r="1.5" fill="white"/><line x1="10" y1="21" x2="19" y2="21" stroke="white" stroke-width="1.8" stroke-linecap="round" opacity="0.8"/><line x1="10" y1="24" x2="17" y2="24" stroke="white" stroke-width="1.8" stroke-linecap="round" opacity="0.6"/><line x1="10" y1="27" x2="15" y2="27" stroke="white" stroke-width="1.8" stroke-linecap="round" opacity="0.4"/></svg>`;
+      const dataUri = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgFavicon)}`;
+      let link = document.querySelector("link[rel~='icon']");
+      if (!link) {
+        link = document.createElement('link');
+        link.rel = 'icon';
+        document.head.appendChild(link);
+      }
+      link.type = 'image/svg+xml';
+      link.href = dataUri;
+    } catch {}
+
+    localStorage.setItem(THEME_PREF_KEY, JSON.stringify({ primaryTheme: theme.id, accentColor: accent.id, accentHue, accentIntensity }));
+  }, [primaryTheme, accentColor, accentHue, accentIntensity]);
 
   const addApi = async (collectionId, api) => {
     const response = await fetch(`${API_URL}/api/collections/${collectionId}/requests`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(api) });
@@ -164,18 +213,18 @@ export function WorkspaceProvider({ children }) {
     if (!(await current.json()).data.length) await createProject('Default Project', 'Proyecto inicial restaurado');
     await loadWorkspace(activeWorkspaceId);
   };
-  const addApiKey = async ({ name, environment, scope }) => {
+  const addApiKey = async ({ name, key: keyText, environment, scope }) => {
     if (!activeProjectId) throw new Error('Selecciona un proyecto primero');
-    const response = await fetch(`${API_URL}/api/projects/${activeProjectId}/api-keys`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, prefix: environment === 'Staging / Dev' ? 'sk_test' : 'sk_live', scopes: [scope] }) });
+    const response = await fetch(`${API_URL}/api/projects/${activeProjectId}/api-keys`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, key: keyText, prefix: environment === 'Staging / Dev' ? 'sk_test' : 'sk_live', scopes: [scope] }) });
     if (!response.ok) throw new Error((await response.json()).message || 'No se pudo crear la API key');
     const key = (await response.json()).data;
     setApiKeys((items) => [key, ...items]);
     return key;
   };
   const deleteApiKey = async (keyId) => {
-    const response = await fetch(`${API_URL}/api-keys/${keyId}/revoke`, { method: 'POST', credentials: 'include' });
+    const response = await fetch(`${API_URL}/api/api-keys/${keyId}/revoke`, { method: 'POST', credentials: 'include' });
     if (!response.ok) throw new Error('No se pudo revocar la API key');
-    setApiKeys((items) => items.map((item) => item.id === keyId ? { ...item, status: 'REVOKED' } : item));
+    setApiKeys((items) => items.filter((item) => item.id !== keyId));
   };
   const createWorkspace = async ({ name, description }) => {
     const response = await fetch(`${API_URL}/api/workspaces`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, description }) });
@@ -229,12 +278,12 @@ export function WorkspaceProvider({ children }) {
 
   return (
     <WorkspaceContext.Provider value={{
-      primaryTheme, setPrimaryTheme, accentColor, setAccentColor,
+      primaryTheme, setPrimaryTheme, accentColor, setAccentColor, accentHue, setAccentHue, accentIntensity, setAccentIntensity,
       collections, apiKeys, workspaceName, setWorkspaceName, workspaces,
       projects, activeWorkspaceId, activeProjectId, createWorkspace, createProject, switchWorkspace, flows, environments, workspaceDetails, createFlow,
       toggleFlowStatus, deleteFlow, runFlowNow, addApi, createBlankRequest, deleteApi,
       addCollection, updateApi, updateCollection, deleteCollection, deleteAllApis, deleteProject,
-      restoreDefaultWorkspace, addApiKey, deleteApiKey,
+      restoreDefaultWorkspace, addApiKey, deleteApiKey, consoleLogs, addConsoleLog, clearConsoleLogs,
     }}>
       {children}
     </WorkspaceContext.Provider>

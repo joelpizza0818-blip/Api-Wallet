@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import logo from '../../assets/logo.svg';
+import { LogoIcon } from '../../components/common/Logo/Logo';
 import UserProfileBubble from '../../components/common/UserProfileBubble/UserProfileBubble';
 import { useWorkspace } from './WorkspaceContext';
 import './TopBar.css';
@@ -61,7 +61,7 @@ function TopBar({ onToggleSettings, isSettingsOpen, onOpenNewWorkspaceModal }) {
             onClick={() => setIsWsMenuOpen(!isWsMenuOpen)}
             aria-expanded={isWsMenuOpen}
           >
-            <img src={logo} alt="" className="wb-brand-icon" />
+            <LogoIcon size={18} className="wb-brand-icon" />
             <span className="wb-workspace-name">{workspaceName}</span>
             <svg
               viewBox="0 0 24 24"

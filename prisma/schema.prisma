@@ -114,7 +114,7 @@ model Workspace {
   name String
   slug String @unique
   description String?
-  inviteCode String @unique @default(cuid())
+  inviteCode String? @unique
   plan String @default("DEVELOPER")
   ownerId String
   createdAt DateTime @default(now())
@@ -125,8 +125,28 @@ model Workspace {
   invitations WorkspaceInvitation[]
   activities Activity[]
   notifications Notification[]
+  theme WorkspaceTheme?
   @@index([ownerId])
   @@map("workspaces")
+}
+
+model WorkspaceTheme {
+  id           String   @id @default(cuid())
+  workspaceId  String   @unique
+  primary      String   @default("#7c3aed")   // --color-primary
+  primaryHover String   @default("#6d28d9")   // --color-primary-hover
+  primaryLight String   @default("#2e1065")   // --color-primary-light
+  background   String   @default("#0f0f0f")   // --color-background
+  surface      String   @default("#1a1a1a")   // --color-surface
+  surfaceAlt   String   @default("#242424")   // --color-surface-alt
+  text         String   @default("#f3f4f6")   // --color-text
+  textMuted    String   @default("#9ca3af")   // --color-text-muted
+  border       String   @default("#2d2d2d")   // --color-border
+  // future variables: success, warning, danger, info, etc.
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  @@map("workspace_themes")
 }
 
 model WorkspaceMember {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import logo from '../../assets/logo.svg';
+import { LogoIcon } from '../../components/common/Logo/Logo';
 import UserProfileBubble from '../../components/common/UserProfileBubble/UserProfileBubble';
 import { useAuth } from '../../features/auth/AuthContext';
 import { useWorkspace } from '../../features/workspaces/WorkspaceContext';
@@ -108,7 +108,7 @@ function DashboardPage() {
       <header className="dash-topbar">
         <div className="dash-topbar__left">
           <Link to="/" className="dash-brand" title="API-Wallet Home">
-            <img src={logo} alt="Logo" className="dash-logo" />
+            <LogoIcon size={24} className="dash-logo" />
             <span className="dash-brand-name">Api-Wallet</span>
           </Link>
           <span className="dash-badge-pro">Workspace Cloud</span>

@@ -1,6 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import logo from '../../assets/logo.svg';
-import ThemeToggle from '../../components/common/ThemeToggle/ThemeToggle';
+import { LogoIcon } from '../../components/common/Logo/Logo';
 import { useAuth } from '../../features/auth/AuthContext';
 import { useFeedback } from '../../components/common/Feedback/FeedbackContext';
 import './AuthPage.css';
@@ -44,10 +43,9 @@ function AuthPage({ mode }) {
     <main className="auth-page">
       <header className="auth-page__header">
         <Link className="auth-page__brand" to="/" aria-label="Volver al inicio de API-Wallet">
-          <img src={logo} alt="" className="auth-page__logo" />
+          <LogoIcon size={30} className="auth-page__logo" />
           <span>API-Wallet</span>
         </Link>
-        <ThemeToggle />
       </header>
 
       <section className="auth-page__content" aria-labelledby="auth-title">

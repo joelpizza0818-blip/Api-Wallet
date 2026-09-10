@@ -216,24 +216,112 @@ export function EditResourceModal({ isOpen, item, kind, collections, onClose }) 
 export function NewKeyModal({ isOpen, onClose }) {
   const { addApiKey } = useWorkspace();
   const { notify } = useFeedback();
+  const [step, setStep] = useState('form'); // 'form' | 'reveal'
   const [name, setName] = useState('');
+  const [keyText, setKeyText] = useState('');
   const [environment, setEnvironment] = useState('Producción');
   const [scope, setScope] = useState('Full Access (Read/Write)');
+  const [createdKey, setCreatedKey] = useState('');
+  const [copied, setCopied] = useState(false);
 
   if (!isOpen) return null;
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!name.trim()) return;
-    try { await addApiKey({ name, environment, scope }); onClose(); notify('API Key generada.'); } catch (error) { notify(error.message || 'No se pudo generar la API Key.', 'error'); }
+  const handleClose = () => {
+    setStep('form');
+    setName('');
+    setKeyText('');
+    setCreatedKey('');
+    setCopied(false);
+    onClose();
   };
 
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!name.trim() || !keyText.trim()) return;
+    try {
+      await addApiKey({ name, key: keyText, environment, scope });
+      setCreatedKey(keyText);
+      setStep('reveal');
+    } catch (error) {
+      notify(error.message || 'No se pudo guardar la API Key.', 'error');
+    }
+  };
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(createdKey);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  };
+
+  if (step === 'reveal') {
+    return (
+      <div className="wb-modal-overlay">
+        <div className="wb-modal wb-modal--reveal" onClick={(e) => e.stopPropagation()}>
+          <div className="wb-modal-header">
+            <div className="wb-header-with-icon">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#10b981" strokeWidth="2.5">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+              <h3>¡API Key guardada!</h3>
+            </div>
+          </div>
+
+          <div className="wb-modal-body">
+            <div className="wb-reveal-warning">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
+              <span>Copia tu clave ahora. <strong>No volverás a ver el valor completo.</strong></span>
+            </div>
+
+            <div className="wb-reveal-key-box">
+              <code className="wb-reveal-key-text">{createdKey}</code>
+              <button
+                type="button"
+                className={`wb-reveal-copy-btn ${copied ? 'wb-reveal-copy-btn--done' : ''}`}
+                onClick={handleCopy}
+              >
+                {copied ? (
+                  <>
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                    ¡Copiado!
+                  </>
+                ) : (
+                  <>
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                    </svg>
+                    Copiar clave
+                  </>
+                )}
+              </button>
+            </div>
+
+            <p className="wb-reveal-note">
+              Guárdala en un gestor de contraseñas o lugar seguro. A partir de ahora solo verás los últimos 4 caracteres.
+            </p>
+          </div>
+
+          <div className="wb-modal-actions">
+            <button type="button" className="btn btn--primary btn--sm" onClick={handleClose}>
+              Entendido, cerrar
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="wb-modal-overlay" onClick={onClose}>
+    <div className="wb-modal-overlay" onClick={handleClose}>
       <div className="wb-modal" onClick={(e) => e.stopPropagation()}>
         <div className="wb-modal-header">
           <h3>Generar nueva API Key</h3>
-          <button type="button" className="wb-modal-close" onClick={onClose}>✕</button>
+          <button type="button" className="wb-modal-close" onClick={handleClose}>✕</button>
         </div>
 
         <form onSubmit={handleSubmit} className="wb-modal-form">
@@ -244,6 +332,17 @@ export function NewKeyModal({ isOpen, onClose }) {
               placeholder="p. ej. Servidor Backend AWS o App Móvil"
               value={name}
               onChange={(e) => setName(e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="wb-form-row">
+            <label>Valor de la API Key</label>
+            <input
+              type="text"
+              placeholder="Pega aquí el valor de tu API Key"
+              value={keyText}
+              onChange={(e) => setKeyText(e.target.value)}
               required
             />
           </div>
@@ -270,15 +369,15 @@ export function NewKeyModal({ isOpen, onClose }) {
               <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
               <path d="M7 11V7a5 5 0 0 1 10 0v4" />
             </svg>
-            <span>Tu API Key se generará de manera segura y podrás copiarla inmediatamente.</span>
+              <span>Tras guardar podrás copiar el valor completo. Después solo se mostrarán los últimos 4 caracteres.</span>
           </div>
 
           <div className="wb-modal-actions">
-            <button type="button" className="btn btn--secondary btn--sm" onClick={onClose}>
+            <button type="button" className="btn btn--secondary btn--sm" onClick={handleClose}>
               Cancelar
             </button>
             <button type="submit" className="btn btn--primary btn--sm">
-              Generar Clave
+              Guardar Clave
             </button>
           </div>
         </form>
