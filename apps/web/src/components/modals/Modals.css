@@ -1,0 +1,224 @@
+.wb-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-4);
+  animation: modalFadeIn 0.15s ease-out;
+}
+
+@keyframes modalFadeIn {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.wb-modal {
+  width: 100%;
+  max-width: 480px;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xl);
+  overflow: hidden;
+}
+
+.wb-modal--danger {
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+.wb-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-3) var(--spacing-4);
+  border-bottom: 1px solid var(--color-border);
+  background-color: var(--color-surface-alt);
+}
+
+.wb-modal-header h3 {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+  margin: 0;
+}
+
+.wb-danger-title {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  color: var(--color-danger);
+}
+
+.wb-danger-title h3 {
+  color: var(--color-danger);
+}
+
+.wb-modal-close {
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.wb-modal-form {
+  padding: var(--spacing-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3);
+}
+
+.wb-form-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.wb-form-row label {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text);
+}
+
+.wb-form-row input,
+.wb-form-row select,
+.wb-form-row textarea {
+  padding: 8px var(--spacing-3);
+  font-size: var(--font-size-xs);
+  background-color: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  outline: none;
+  font-family: inherit;
+  transition: border-color var(--transition-fast);
+}
+
+.wb-form-row input:focus,
+.wb-form-row select:focus,
+.wb-form-row textarea:focus {
+  border-color: var(--color-primary);
+}
+
+.wb-form-row-group {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: var(--spacing-3);
+}
+
+.wb-key-security-notice {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  padding: var(--spacing-2) var(--spacing-3);
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.wb-modal-body {
+  padding: var(--spacing-4);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+.wb-confirm-prompt {
+  margin-top: var(--spacing-3);
+  color: var(--color-text);
+}
+
+.wb-confirm-input {
+  width: 100%;
+  margin-top: var(--spacing-2);
+  padding: 8px var(--spacing-3);
+  background-color: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-xs);
+  outline: none;
+}
+
+.wb-confirm-input:focus {
+  border-color: var(--color-danger);
+}
+
+.wb-modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--spacing-2);
+  padding: var(--spacing-3) var(--spacing-4);
+  border-top: 1px solid var(--color-border);
+  background-color: var(--color-surface-alt);
+}
+
+.wb-header-with-icon {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+}
+
+.wb-header-with-icon h3 {
+  margin: 0;
+}
+
+.wb-radio-toggle-group {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-2);
+  margin-top: 2px;
+}
+
+.wb-radio-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px var(--spacing-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background-color: var(--color-background);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.wb-radio-label input {
+  margin: 0;
+  accent-color: var(--color-primary);
+}
+
+.wb-radio-active {
+  border-color: var(--color-primary);
+  background-color: var(--color-primary-light);
+  color: var(--color-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+.wb-form-checkbox-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: var(--spacing-1);
+}
+
+.wb-form-checkbox-row input {
+  margin-top: 2px;
+  accent-color: var(--color-primary);
+}
+
+.wb-form-checkbox-row label {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  line-height: 1.4;
+}
+

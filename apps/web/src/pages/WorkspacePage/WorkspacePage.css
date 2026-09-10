@@ -1,0 +1,153 @@
+.wb-app-layout {
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background-color: var(--color-background);
+  color: var(--color-text);
+}
+
+.wb-main-container {
+  display: flex;
+  flex: 1;
+  height: calc(100vh - 48px);
+  overflow: hidden;
+}
+
+/* Center Canvas */
+.wb-canvas {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--color-background);
+}
+
+/* Postman Tabs Bar */
+.wb-tabs-bar {
+  height: 38px;
+  background-color: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  align-items: flex-end;
+  padding: 0 var(--spacing-2);
+  gap: 2px;
+  overflow-x: auto;
+  user-select: none;
+}
+
+.wb-editor-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 var(--spacing-3);
+  background-color: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  border-bottom: none;
+  border-top-left-radius: var(--radius-sm);
+  border-top-right-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  max-width: 190px;
+}
+
+.wb-editor-tab:hover {
+  background-color: var(--color-background);
+  color: var(--color-text);
+}
+
+.wb-editor-tab--active {
+  background-color: var(--color-background);
+  color: var(--color-text);
+  border-color: var(--color-border);
+  border-top: 2px solid var(--color-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+.wb-tab-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wb-tab-method-tag {
+  font-size: 9px;
+  font-weight: bold;
+  font-family: var(--font-family-mono);
+  padding: 1px 3px;
+  border-radius: 2px;
+}
+
+.tag--get {
+  color: #10b981;
+}
+
+.tag--post {
+  color: #f59e0b;
+}
+
+.tag--put {
+  color: #3b82f6;
+}
+
+.tag--delete {
+  color: #ef4444;
+}
+
+.tag--patch {
+  color: #8b5cf6;
+}
+
+.wb-tab-close {
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: 10px;
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 2px;
+}
+
+.wb-tab-close:hover {
+  background-color: var(--color-surface-alt);
+  color: var(--color-text);
+}
+
+.wb-new-tab-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-md);
+  font-weight: bold;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  margin-left: 4px;
+  margin-bottom: 3px;
+  transition: all var(--transition-fast);
+}
+
+.wb-new-tab-btn:hover {
+  background-color: var(--color-surface-alt);
+  color: var(--color-text);
+}
+
+/* Content inside canvas */
+.wb-canvas-content {
+  flex: 1;
+  height: calc(100% - 38px);
+  overflow: hidden;
+}
