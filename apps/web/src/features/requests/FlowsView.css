@@ -1,8 +1,10 @@
 .wb-flows-view {
   display: flex;
   flex-direction: column;
-  height: 100%;
-  overflow-y: auto;
+  height: auto;
+  min-height: 100%;
+  min-width: 0;
+  overflow: visible;
   padding: var(--spacing-6);
   gap: var(--spacing-6);
   background-color: var(--color-background);
@@ -114,6 +116,8 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   overflow: hidden;
+  flex: 0 0 auto;
+  min-width: 0;
 }
 
 .wb-flows-container-header {
@@ -163,6 +167,7 @@
 .wb-flows-list {
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 .wb-flow-item-card {
@@ -172,6 +177,8 @@
   flex-direction: column;
   gap: var(--spacing-3);
   transition: background-color var(--transition-fast);
+  flex: 0 0 auto;
+  min-width: 0;
 }
 
 .wb-flow-item-card:last-child {
@@ -204,6 +211,8 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-2);
+  min-width: 0;
+  flex-wrap: wrap;
 }
 
 .wb-flow-status-dot {
@@ -226,6 +235,7 @@
   font-weight: var(--font-weight-semibold);
   color: var(--color-text);
   margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .wb-flow-frequency-badge {
@@ -318,9 +328,13 @@
 }
 
 .wb-target-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   color: var(--color-text-muted);
   font-weight: var(--font-weight-medium);
 }
+.wb-target-icon, .wb-inline-icon { display: inline-flex; align-items: center; vertical-align: middle; }
 
 .wb-target-name {
   font-size: 11px;
@@ -340,6 +354,7 @@
   padding: var(--spacing-2) var(--spacing-3);
   gap: var(--spacing-4);
   flex-wrap: wrap;
+  min-width: 0;
 }
 
 .wb-telem-col {
@@ -379,6 +394,8 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   overflow: hidden;
+  flex: 0 0 auto;
+  min-width: 0;
 }
 
 .wb-logs-header {
@@ -408,6 +425,7 @@
 
 .wb-logs-table {
   width: 100%;
+  min-width: 700px;
   border-collapse: collapse;
   text-align: left;
   font-size: var(--font-size-xs);
@@ -437,6 +455,24 @@
   background: rgba(16, 185, 129, 0.15);
   padding: 1px 4px;
   border-radius: 3px;
+}
+
+@media (max-width: 760px) {
+  .wb-flows-view { padding: var(--spacing-4); gap: var(--spacing-4); }
+  .wb-flows-header { align-items: stretch; flex-direction: column; }
+  .wb-create-flow-btn { width: fit-content; }
+  .wb-flows-metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .wb-flows-container-header, .wb-logs-header { align-items: flex-start; flex-direction: column; gap: 6px; }
+  .wb-flow-title-row { align-items: flex-start; flex-direction: column; }
+  .wb-flow-actions { width: 100%; flex-wrap: wrap; }
+  .wb-flow-actions button { min-height: 32px; }
+  .wb-flow-target-meta { align-items: flex-start; flex-direction: column; gap: 4px; }
+  .wb-target-name { max-width: 100%; overflow-wrap: anywhere; }
+}
+
+@media (max-width: 460px) {
+  .wb-flows-metrics-grid { grid-template-columns: 1fr; }
+  .wb-flow-telemetry-row { align-items: flex-start; flex-direction: column; }
 }
 
 .wb-check-green {

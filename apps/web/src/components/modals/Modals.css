@@ -161,6 +161,25 @@
   background-color: var(--color-surface-alt);
 }
 
+.wb-modal-actions .btn,
+.wb-modal-actions .btn-danger-solid {
+  min-height: 36px;
+  padding: 0 15px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  transition: background-color .15s ease, border-color .15s ease, transform .15s ease;
+}
+
+.wb-modal-actions .btn:hover,
+.wb-modal-actions .btn-danger-solid:hover { transform: translateY(-1px); }
+.wb-modal-actions .btn--secondary { background: var(--color-surface); border: 1px solid var(--color-border); color: var(--color-text-muted); }
+.wb-modal-actions .btn--secondary:hover { border-color: var(--color-primary); color: var(--color-text); }
+.wb-modal-actions .btn--primary { background: var(--color-primary); border: 1px solid var(--color-primary); color: #fff; }
+.wb-modal-actions .btn-danger-solid { background: var(--color-danger); border: 1px solid var(--color-danger); color: #fff; }
+.wb-modal-actions .btn:disabled, .wb-modal-actions .btn-danger-solid:disabled { cursor: not-allowed; opacity: .45; transform: none; }
+
 .wb-header-with-icon {
   display: flex;
   align-items: center;

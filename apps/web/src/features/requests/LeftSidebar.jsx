@@ -2,16 +2,53 @@ import { useState } from 'react';
 import { useWorkspace } from '../workspaces/WorkspaceContext';
 import './LeftSidebar.css';
 
+function CollectionNode({ collection, collections, expandedFolders, toggleFolder, selectedApiId, activeView, onSelectApi, onOpenNewApiRequest, deleteApi, getMethodClass, onOpenContextMenu }) {
+  const isExpanded = expandedFolders[collection.id] !== false;
+  const children = collections.filter((item) => item.parentId === collection.id);
+
+  return (
+    <div className="wb-folder-group" key={collection.id}>
+      <div className="wb-tree-item wb-tree-item--folder" onClick={() => toggleFolder(collection.id)} onContextMenu={(event) => { event.preventDefault(); onOpenContextMenu(event, collection, 'collection'); }}>
+        <span className="wb-chevron-icon">
+          <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s ease' }}>
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+        </span>
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" className="wb-folder-icon">
+          <path d="M22 19a2 2 0 0 1-2-2V7a2 2 0 0 0-2-2h-7l-2-2H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2z" />
+        </svg>
+        <span className="wb-tree-label">{collection.name}</span>
+        <span className="wb-count-badge">{collection.apis.length}</span>
+      </div>
+
+      {isExpanded && <div className="wb-folder-children">
+        {collection.apis.length === 0 && children.length === 0 && <div className="wb-empty-folder"><span>Carpeta vacía</span><button type="button" className="wb-add-request-inline" onClick={(event) => { event.stopPropagation(); onOpenNewApiRequest(collection.id); }}>↗ Add request</button></div>}
+        {collection.apis.map((api) => {
+          const isSelected = selectedApiId === api.id && activeView === 'api-detail';
+          return <div key={api.id} className={`wb-tree-item wb-tree-item--api ${isSelected ? 'wb-tree-item--selected' : ''}`} onClick={() => onSelectApi({ ...api, collectionAuthorization: collection.authorization, collectionPreRequestScript: collection.preRequestScript, collectionTestScript: collection.testScript })} onContextMenu={(event) => { event.preventDefault(); onOpenContextMenu(event, api, 'request'); }}>
+            <span className={`wb-method-badge ${getMethodClass(api.method)}`}>{api.method}</span>
+            <span className="wb-api-name" title={api.path}>{api.name}</span>
+            <button type="button" className="wb-item-delete-btn" title="Eliminar este endpoint" onClick={(event) => { event.stopPropagation(); deleteApi(api.id); }}>✕</button>
+          </div>;
+        })}
+        {children.map((child) => <CollectionNode key={child.id} collection={child} collections={collections} expandedFolders={expandedFolders} toggleFolder={toggleFolder} selectedApiId={selectedApiId} activeView={activeView} onSelectApi={onSelectApi} onOpenNewApiRequest={onOpenNewApiRequest} deleteApi={deleteApi} getMethodClass={getMethodClass} onOpenContextMenu={onOpenContextMenu} />)}
+      </div>}
+    </div>
+  );
+}
+
 function LeftSidebar({
   activeView,
   setActiveView,
   selectedApiId,
   onSelectApi,
-  onOpenNewApiModal,
+  onOpenNewApiRequest,
+  onOpenNewCollection,
   onOpenNewKeyModal,
   onOpenFlowsView,
+  onOpenContextMenu,
 }) {
-  const { collections, apiKeys, deleteApi, flows } = useWorkspace();
+  const { collections, apiKeys, deleteApi, deleteCollection, flows } = useWorkspace();
   const [expandedFolders, setExpandedFolders] = useState({
     'col-auth': true,
     'col-admin': true,
@@ -141,17 +178,21 @@ function LeftSidebar({
                   </svg>
                 </button>
               ) : (
-                <button
-                  type="button"
-                  className="wb-action-icon-btn"
-                  onClick={onOpenNewApiModal}
-                  title="Nuevo Endpoint / API"
-                >
-                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <line x1="12" y1="5" x2="12" y2="19" />
-                    <line x1="5" y1="12" x2="19" y2="12" />
-                  </svg>
-                </button>
+                <>
+                  <button type="button" className="wb-action-icon-btn" onClick={onOpenNewCollection} title="Nueva carpeta">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                      <line x1="12" y1="10" x2="12" y2="16" />
+                      <line x1="9" y1="13" x2="15" y2="13" />
+                    </svg>
+                  </button>
+                  <button type="button" className="wb-action-icon-btn" onClick={() => onOpenNewApiRequest()} title="Nuevo Endpoint / API">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <line x1="12" y1="5" x2="12" y2="19" />
+                      <line x1="5" y1="12" x2="19" y2="12" />
+                    </svg>
+                  </button>
+                </>
               )}
             </div>
           </div>
@@ -208,7 +249,7 @@ function LeftSidebar({
                       </span>
                     </div>
                     <span className="wb-key-preview">
-                      {k.key.substring(0, 10)}••••••••••
+                      {k.key ? `${k.key.substring(0, 10)}••••••••••` : `${k.prefix || 'sk_live'}_••••${k.lastFourCharacters || '••••'}`}
                     </span>
                   </div>
                 ))
@@ -246,11 +287,11 @@ function LeftSidebar({
                     : 'Ningún endpoint coincide con la búsqueda.'}
                 </div>
               ) : (
-                filteredCollections.map((col) => {
-                  const isExpanded = !!expandedFolders[col.id];
+                filteredCollections.filter((collection) => !collection.parentId).map((col) => {
                   return (
-                    <div key={col.id} className="wb-folder-group">
-                      {/* Folder Title Item */}
+                    <CollectionNode key={col.id} collection={col} collections={filteredCollections} expandedFolders={expandedFolders} toggleFolder={toggleFolder} selectedApiId={selectedApiId} activeView={activeView} onSelectApi={onSelectApi} onOpenNewApiRequest={onOpenNewApiRequest} deleteApi={deleteApi} getMethodClass={getMethodClass} onOpenContextMenu={onOpenContextMenu} />
+                    /*
+                      {/* Folder Title Item * /}
                       <div
                         className="wb-tree-item wb-tree-item--folder"
                         onClick={() => toggleFolder(col.id)}
@@ -286,11 +327,15 @@ function LeftSidebar({
                         <span className="wb-count-badge">{col.apis.length}</span>
                       </div>
 
-                      {/* Endpoints in folder */}
+                      {/* Endpoints in folder * /}
                       {isExpanded && (
                         <div className="wb-folder-children">
                           {col.apis.length === 0 ? (
-                            <div className="wb-empty-folder">Carpeta vacía</div>
+                            <div className="wb-empty-folder">
+                              <span>Carpeta vacía</span>
+                              <button type="button" className="wb-add-request-inline" onClick={(event) => { event.stopPropagation(); onOpenNewApiRequest(col.id); }}>↗ Add request</button>
+                              <button type="button" className="wb-add-request-inline" onClick={(event) => { event.stopPropagation(); onOpenNewApiRequest(col.id); }}>↗ Add request</button>
+                            </div>
                           ) : (
                             col.apis.map((api) => {
                               const isSelected = selectedApiId === api.id && activeView === 'api-detail';
@@ -298,7 +343,7 @@ function LeftSidebar({
                                 <div
                                   key={api.id}
                                   className={`wb-tree-item wb-tree-item--api ${isSelected ? 'wb-tree-item--selected' : ''}`}
-                                  onClick={() => onSelectApi(api)}
+                                  onClick={() => onSelectApi({ ...api, collectionAuthorization: col.authorization, collectionPreRequestScript: col.preRequestScript, collectionTestScript: col.testScript })}
                                 >
                                   <span className={`wb-method-badge ${getMethodClass(api.method)}`}>
                                     {api.method}
@@ -323,7 +368,7 @@ function LeftSidebar({
                           )}
                         </div>
                       )}
-                    </div>
+                    </div> */
                   );
                 })
               )}

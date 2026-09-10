@@ -1,98 +1,108 @@
-import { createContext, useContext, useState, useEffect } from 'react';
-
-const AUTH_STORAGE_KEY = 'api-wallet-auth-user';
-const AUTH_STATUS_KEY = 'api-wallet-auth-status';
-
-const DEFAULT_USER = {
-  id: 'usr_dev_01',
-  name: 'Alex Dev',
-  email: 'alex@apiwallet.io',
-  avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Alex',
-  role: 'Developer Admin',
-  joinedDate: 'Mayo 2026',
-};
+import { createContext, useContext, useState, useCallback, useEffect } from 'react';
 
 const AuthContext = createContext(null);
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(() => {
-    try {
-      const saved = localStorage.getItem(AUTH_STORAGE_KEY);
-      return saved ? JSON.parse(saved) : DEFAULT_USER;
-    } catch {
-      return DEFAULT_USER;
-    }
-  });
+  const [user, setUser] = useState(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
 
-  const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    try {
-      const savedStatus = localStorage.getItem(AUTH_STATUS_KEY);
-      return savedStatus !== null ? savedStatus === 'true' : true; // Default to true for quick workspace access
-    } catch {
-      return true;
-    }
-  });
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
-      localStorage.setItem(AUTH_STATUS_KEY, String(isAuthenticated));
-    } catch (e) {
-      console.error('Error saving auth to localStorage', e);
-    }
-  }, [user, isAuthenticated]);
-
-  const login = ({ email, name }) => {
-    setUser((prev) => ({
-      ...prev,
-      email: email || prev.email,
-      name: name || (email ? email.split('@')[0] : prev.name),
-    }));
-    setIsAuthenticated(true);
+  const authenticate = async (endpoint, payload) => {
+    const response = await fetch(`${API_URL}/api/auth/${endpoint}`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || 'Authentication failed');
+    setUser(result.user); setIsAuthenticated(true); return result.user;
   };
+  const login = ({ email, password }) => authenticate('login', { email, password });
+  const register = ({ name, email, password }) => authenticate('register', { name, email, password });
 
-  const register = ({ name, email }) => {
-    setUser({
-      id: `usr_${Date.now().toString(36)}`,
-      name: name || 'Nuevo Usuario',
-      email: email || 'usuario@apiwallet.io',
-      avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(name || 'User')}`,
-      role: 'Developer Admin',
-      joinedDate: 'Hoy',
-    });
-    setIsAuthenticated(true);
-  };
-
-  const logout = () => {
+  const logout = async () => {
+    await fetch(`${API_URL}/api/auth/logout`, { method: 'POST', credentials: 'include' });
     setIsAuthenticated(false);
+    setUser(null);
   };
 
-  const updateProfile = ({ name, avatar, email }) => {
-    setUser((prev) => ({
-      ...prev,
-      ...(name !== undefined && { name }),
-      ...(avatar !== undefined && { avatar }),
-      ...(email !== undefined && { email }),
-    }));
+  const updateProfile = async ({ name, avatar }) => {
+    const response = await fetch(`${API_URL}/api/auth/me`, { method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, avatarUrl: avatar }) });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || 'No se pudo actualizar el perfil');
+    setUser(result.user);
+    return result.user;
   };
 
-  const changePassword = ({ currentPassword: _currentPassword, newPassword }) => {
-    if (!newPassword || newPassword.length < 6) {
-      return { success: false, message: 'La nueva contraseña debe tener al menos 6 caracteres.' };
-    }
+  const changePassword = async ({ currentPassword, newPassword }) => {
+    const response = await fetch(`${API_URL}/api/auth/change-password`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ currentPassword, newPassword }) });
+    if (!response.ok) { const result = await response.json(); return { success: false, message: result.message || 'No se pudo actualizar la contraseña.' }; }
     return { success: true, message: '¡Contraseña actualizada correctamente!' };
   };
+
+  const continueWithGithub = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/auth/github/status`);
+      const { configured } = await response.json();
+      if (!configured) throw new Error('GitHub OAuth no está configurado.');
+      window.location.assign(`${API_URL}/api/auth/github`);
+    } catch (error) {
+      throw new Error(`${error.message} Revisa que el backend esté activo en ${API_URL}.`);
+    }
+  };
+
+  const continueWithGoogle = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/auth/google/status`);
+      const { configured } = await response.json();
+      if (!configured) {
+        await continueWithGithub();
+        return;
+      }
+      window.location.assign(`${API_URL}/api/auth/google`);
+    } catch (error) {
+      throw new Error(`${error.message} Revisa que el backend esté activo en ${API_URL}.`);
+    }
+  };
+
+  const refreshSession = useCallback(async () => {
+    setIsAuthLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/api/auth/me`, { credentials: 'include' });
+      if (!response.ok) {
+        setIsAuthenticated(false);
+        setUser(null);
+        return false;
+      }
+      const { user: currentUser } = await response.json();
+      setUser((previous) => ({ ...previous, ...currentUser }));
+      setIsAuthenticated(true);
+      return true;
+    } catch {
+      setIsAuthenticated(false);
+      setUser(null);
+      return false;
+    } finally {
+      setIsAuthLoading(false);
+    }
+  }, []);
+
+  // Restores the cookie-backed session before workspace data is requested.
+  useEffect(() => {
+    refreshSession();
+  }, [refreshSession]);
 
   return (
     <AuthContext.Provider
       value={{
         user,
         isAuthenticated,
+        isAuthLoading,
         login,
         register,
         logout,
         updateProfile,
         changePassword,
+        continueWithGoogle,
+        continueWithGithub,
+        refreshSession,
       }}
     >
       {children}

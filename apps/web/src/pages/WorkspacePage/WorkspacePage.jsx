@@ -1,21 +1,28 @@
 import { useState } from 'react';
+import { useFeedback } from '../../components/common/Feedback/FeedbackContext';
 import FlowsView from '../../features/requests/FlowsView';
-import { DocumentsView, EnvironmentsView, LineHistoryView, MocksView } from '../../features/workspaces/ArtifactViews';
+import { CollectionsView, DocumentsView, EnvironmentsView, LineHistoryView, MocksView } from '../../features/workspaces/ArtifactViewsPro';
 import LeftSidebar from '../../features/requests/LeftSidebar';
 import SettingsDrawer from '../../features/settings/SettingsDrawer';
 import ApiKeysView from '../../features/secrets/ApiKeysView';
 import WorkspaceOverview from '../../features/workspaces/WorkspaceOverview';
+import ApiInspector from '../../features/requests/ApiInspector';
 import TopBar from '../../features/workspaces/TopBar';
+import { useWorkspace } from '../../features/workspaces/WorkspaceContext';
 import {
-  NewApiModal,
   NewKeyModal,
+  NewCollectionModal,
+  EditResourceModal,
   NewFlowModal,
   ConfirmDeleteApisModal,
   ConfirmDeleteProjectModal,
+  NewWorkspaceModal,
 } from '../../components/modals/Modals';
 import './WorkspacePage.css';
 
 function WorkspacePage() {
+  const { collections, addCollection, createBlankRequest, deleteApi, deleteCollection } = useWorkspace();
+  const { notify, confirm } = useFeedback();
   // Navigation & view states
   const [activeView, setActiveView] = useState('overview');
   const [selectedApi, setSelectedApi] = useState(null);
@@ -30,11 +37,14 @@ function WorkspacePage() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   // Modal dialog states
-  const [isNewApiModalOpen, setIsNewApiModalOpen] = useState(false);
   const [isNewKeyModalOpen, setIsNewKeyModalOpen] = useState(false);
+  const [isNewCollectionModalOpen, setIsNewCollectionModalOpen] = useState(false);
   const [isDeleteApisModalOpen, setIsDeleteApisModalOpen] = useState(false);
   const [isDeleteProjectModalOpen, setIsDeleteProjectModalOpen] = useState(false);
   const [isNewFlowModalOpen, setIsNewFlowModalOpen] = useState(false);
+  const [isNewWorkspaceModalOpen, setIsNewWorkspaceModalOpen] = useState(false);
+  const [contextMenu, setContextMenu] = useState(null);
+  const [editingResource, setEditingResource] = useState(null);
 
   // Handler to select an API from left sidebar or overview
   const handleSelectApi = (api) => {
@@ -51,9 +61,18 @@ function WorkspacePage() {
     setActiveTabId(`api-${api.id}`);
   };
 
-  // Handler when a new API is created from the modal
-  const handleApiCreated = (newApi) => {
-    if (newApi) handleSelectApi(newApi);
+  const handleCreateRequest = async (collectionId = collections[0]?.id) => {
+    try {
+      let targetCollectionId = collectionId;
+      if (!targetCollectionId) {
+        const createdCollection = await addCollection('My Collection', 'Requests del workspace');
+        targetCollectionId = createdCollection.id;
+      }
+      const created = await createBlankRequest(targetCollectionId);
+      handleSelectApi(created);
+    } catch (error) {
+      notify(error.message || 'No se pudo crear la request.', 'error');
+    }
   };
 
   // Flow view handler
@@ -123,12 +142,28 @@ function WorkspacePage() {
     }
   };
 
+  const handleContextMenu = (event, item, kind) => setContextMenu({ x: event.clientX, y: event.clientY, item, kind });
+  const closeContextMenu = () => setContextMenu(null);
+  const handleDeleteResource = async () => {
+    if (!contextMenu) return;
+    const { item, kind } = contextMenu;
+    const accepted = await confirm({ title: kind === 'collection' ? 'Eliminar carpeta' : 'Eliminar request', message: kind === 'collection' ? `Se eliminará "${item.name}" y su contenido.` : `Se eliminará "${item.name}" permanentemente.`, confirmLabel: 'Eliminar' });
+    if (!accepted) return;
+    try {
+      if (kind === 'collection') await deleteCollection(item.id);
+      else await deleteApi(item.id);
+      notify(kind === 'collection' ? 'Carpeta eliminada.' : 'Request eliminada.');
+    } catch (error) { notify(error.message || 'No se pudo eliminar.', 'error'); }
+    closeContextMenu();
+  };
+
   return (
     <div className="wb-app-layout">
       {/* Top Navbar */}
       <TopBar
         isSettingsOpen={isSettingsOpen}
         onToggleSettings={() => setIsSettingsOpen(!isSettingsOpen)}
+        onOpenNewWorkspaceModal={() => setIsNewWorkspaceModalOpen(true)}
       />
 
       {/* Main App Work Area */}
@@ -139,9 +174,11 @@ function WorkspacePage() {
           setActiveView={handleSelectView}
           selectedApiId={selectedApi?.id}
           onSelectApi={handleSelectApi}
-          onOpenNewApiModal={() => setIsNewApiModalOpen(true)}
+          onOpenNewApiRequest={handleCreateRequest}
+          onOpenNewCollection={() => setIsNewCollectionModalOpen(true)}
           onOpenNewKeyModal={() => setIsNewKeyModalOpen(true)}
           onOpenFlowsView={handleSelectFlow}
+          onOpenContextMenu={handleContextMenu}
         />
 
         {/* Center Canvas Area */}
@@ -177,7 +214,7 @@ function WorkspacePage() {
             <button
               type="button"
               className="wb-new-tab-btn"
-              onClick={() => setIsNewApiModalOpen(true)}
+              onClick={() => handleCreateRequest()}
               title="Nueva Petición / Endpoint"
             >
               +
@@ -189,8 +226,11 @@ function WorkspacePage() {
             {activeView === 'overview' && (
               <WorkspaceOverview
                 onNavigateApis={() => handleSelectView('collections')}
+                onNavigateDocs={() => handleSelectView('documents')}
+                onNavigateFlows={() => handleSelectView('flows')}
                 onNavigateKeys={() => handleSelectView('apikeys')}
                 onOpenSettings={() => setIsSettingsOpen(true)}
+                onOpenNewFlowModal={() => setIsNewFlowModalOpen(true)}
               />
             )}
 
@@ -205,12 +245,20 @@ function WorkspacePage() {
             )}
 
             {activeView === 'environments' && <EnvironmentsView />}
+            {activeView === 'collections' && <CollectionsView onSelectApi={handleSelectApi} />}
             {activeView === 'documents' && <DocumentsView />}
             {activeView === 'mocks' && <MocksView />}
             {activeView === 'history' && <LineHistoryView />}
+            {activeView === 'api-detail' && selectedApi && <ApiInspector api={selectedApi} />}
           </div>
         </main>
       </div>
+
+      {contextMenu && <div className="wb-context-menu" style={{ left: contextMenu.x, top: contextMenu.y }} role="menu" onMouseLeave={closeContextMenu}>
+        <button type="button" onClick={() => { setEditingResource(contextMenu); closeContextMenu(); }}>✎ {contextMenu.kind === 'collection' ? 'Editar carpeta' : 'Renombrar request'}</button>
+        {contextMenu.kind === 'request' && <button type="button" onClick={() => { handleSelectApi(contextMenu.item); closeContextMenu(); }}>⚙ Editar request</button>}
+        <button type="button" className="wb-context-menu-danger" onClick={handleDeleteResource}>⌫ Borrar</button>
+      </div>}
 
       {/* Right Settings Drawer */}
       <SettingsDrawer
@@ -227,20 +275,32 @@ function WorkspacePage() {
       />
 
       {/* Modals */}
-      <NewApiModal
-        isOpen={isNewApiModalOpen}
-        onClose={() => setIsNewApiModalOpen(false)}
-        onApiCreated={handleApiCreated}
-      />
-
       <NewKeyModal
         isOpen={isNewKeyModalOpen}
         onClose={() => setIsNewKeyModalOpen(false)}
       />
 
+      <NewCollectionModal
+        isOpen={isNewCollectionModalOpen}
+        onClose={() => setIsNewCollectionModalOpen(false)}
+      />
+
+      <EditResourceModal
+        isOpen={!!editingResource}
+        item={editingResource?.item}
+        kind={editingResource?.kind}
+        collections={collections}
+        onClose={() => setEditingResource(null)}
+      />
+
       <NewFlowModal
         isOpen={isNewFlowModalOpen}
         onClose={() => setIsNewFlowModalOpen(false)}
+      />
+
+      <NewWorkspaceModal
+        isOpen={isNewWorkspaceModalOpen}
+        onClose={() => setIsNewWorkspaceModalOpen(false)}
       />
 
       <ConfirmDeleteApisModal

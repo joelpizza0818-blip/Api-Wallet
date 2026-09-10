@@ -1,584 +1,241 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import { PRIMARY_THEMES, ACCENT_COLORS } from './themeConstants';
+import { useAuth } from '../auth/AuthContext';
 
 export { PRIMARY_THEMES, ACCENT_COLORS };
 
-const WORKSPACE_STORAGE_KEY = 'api-wallet-workspace-data';
 const THEME_PREF_KEY = 'api-wallet-theme-prefs';
-
-const INITIAL_COLLECTIONS = [
-  {
-    id: 'col-auth',
-    name: 'Auth',
-    description: 'Endpoints de autenticación y sesiones de usuario',
-    apis: [
-      {
-        id: 'api-1',
-        name: 'Login User',
-        method: 'POST',
-        path: '/api/v1/auth/login',
-        description: 'Autenticación con email y contraseña, retorna JWT.',
-        headers: [{ key: 'Content-Type', value: 'application/json' }],
-        params: [],
-        body: '{\n  "email": "alex@apiwallet.io",\n  "password": "••••••••"\n}',
-        status: '200 OK',
-        responseSample: '{\n  "status": "success",\n  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",\n  "user": {\n    "id": "usr_99",\n    "name": "Alex Dev",\n    "email": "alex@apiwallet.io"\n  }\n}'
-      },
-      {
-        id: 'api-2',
-        name: 'Register Account',
-        method: 'POST',
-        path: '/api/v1/auth/register',
-        description: 'Registro de nuevas cuentas de desarrolladores.',
-        headers: [{ key: 'Content-Type', value: 'application/json' }],
-        params: [],
-        body: '{\n  "name": "Alex Dev",\n  "email": "alex@apiwallet.io",\n  "password": "SuperSecret123!"\n}',
-        status: '201 Created',
-        responseSample: '{\n  "message": "Usuario creado exitosamente",\n  "id": "usr_102"\n}'
-      },
-      {
-        id: 'api-3',
-        name: 'Get Current Session',
-        method: 'GET',
-        path: '/api/v1/auth/me',
-        description: 'Obtener datos del usuario activo.',
-        headers: [{ key: 'Authorization', value: 'Bearer {{token}}' }],
-        params: [],
-        body: '',
-        status: '200 OK',
-        responseSample: '{\n  "id": "usr_99",\n  "name": "Alex Dev",\n  "role": "Admin",\n  "status": "active"\n}'
-      }
-    ]
-  },
-  {
-    id: 'col-admin',
-    name: 'Admin',
-    description: 'Administración y métricas del sistema',
-    apis: [
-      {
-        id: 'api-4',
-        name: 'List All Users',
-        method: 'GET',
-        path: '/api/v1/admin/users',
-        description: 'Lista paginada de todos los usuarios registrados.',
-        headers: [{ key: 'X-Admin-Key', value: '{{admin_secret}}' }],
-        params: [{ key: 'page', value: '1' }, { key: 'limit', value: '20' }],
-        body: '',
-        status: '200 OK',
-        responseSample: '{\n  "total": 128,\n  "page": 1,\n  "users": [\n    { "id": 1, "email": "alex@apiwallet.io" },\n    { "id": 2, "email": "dev2@apiwallet.io" }\n  ]\n}'
-      },
-      {
-        id: 'api-5',
-        name: 'System Metrics',
-        method: 'GET',
-        path: '/api/v1/admin/metrics',
-        description: 'Estadísticas de consumo de API y latencia.',
-        headers: [],
-        params: [],
-        body: '',
-        status: '200 OK',
-        responseSample: '{\n  "uptime": "99.98%",\n  "requests_24h": 452901,\n  "avg_latency_ms": 38\n}'
-      }
-    ]
-  },
-  {
-    id: 'col-trailers',
-    name: 'Trailers',
-    description: 'Servicios de streaming y catálogo de trailers',
-    apis: [
-      {
-        id: 'api-6',
-        name: 'Trailers Feed',
-        method: 'GET',
-        path: '/api/v1/trailers/feed',
-        description: 'Obtiene el listado más reciente de trailers destacados.',
-        headers: [],
-        params: [{ key: 'genre', value: 'action' }],
-        body: '',
-        status: '200 OK',
-        responseSample: '[\n  { "id": 101, "title": "Cyber City 2099", "duration": "2m 14s", "quality": "4K" },\n  { "id": 102, "title": "Deep Ocean", "duration": "1m 45s", "quality": "1080p" }\n]'
-      },
-      {
-        id: 'api-7',
-        name: 'Upload Trailer',
-        method: 'POST',
-        path: '/api/v1/trailers/create',
-        description: 'Publica un nuevo trailer multimedia en la plataforma.',
-        headers: [{ key: 'Content-Type', value: 'application/json' }],
-        params: [],
-        body: '{\n  "title": "Neon Horizon",\n  "video_url": "https://cdn.apiwallet.io/trailers/103.mp4",\n  "category": "Sci-Fi"\n}',
-        status: '201 Created',
-        responseSample: '{\n  "status": "published",\n  "trailer_id": "trl_5521",\n  "cdn_url": "https://cdn.apiwallet.io/trailers/103.mp4"\n}'
-      }
-    ]
-  },
-  {
-    id: 'col-notices',
-    name: 'Notices',
-    description: 'Notificaciones y avisos del sistema',
-    apis: [
-      {
-        id: 'api-8',
-        name: 'Broadcast Notice',
-        method: 'POST',
-        path: '/api/v1/notices/broadcast',
-        description: 'Envía un aviso global a todos los clientes conectados.',
-        headers: [{ key: 'Content-Type', value: 'application/json' }],
-        params: [],
-        body: '{\n  "type": "maintenance",\n  "message": "Mantenimiento programado a las 02:00 UTC"\n}',
-        status: '200 OK',
-        responseSample: '{\n  "delivered_to": 18420,\n  "scheduled_at": "2026-09-10T02:00:00Z"\n}'
-      }
-    ]
-  },
-  {
-    id: 'col-misc',
-    name: 'Misc',
-    description: 'Utilidades varias, ping y comprobaciones de salud',
-    apis: [
-      {
-        id: 'api-9',
-        name: 'Get data',
-        method: 'GET',
-        path: '/api/v1/misc/data',
-        description: 'Comprobación de conectividad y estado básico.',
-        headers: [],
-        params: [],
-        body: '',
-        status: '200 OK',
-        responseSample: '{\n  "status": "healthy",\n  "version": "v1.4.2",\n  "timestamp": "2026-09-09T17:30:00Z"\n}'
-      },
-      {
-        id: 'api-10',
-        name: 'Post data',
-        method: 'POST',
-        path: '/api/v1/misc/echo',
-        description: 'Echo de prueba para validar payload y headers.',
-        headers: [{ key: 'Content-Type', value: 'application/json' }],
-        params: [],
-        body: '{\n  "message": "Hola API-Wallet",\n  "timestamp": 1788996159\n}',
-        status: '200 OK',
-        responseSample: '{\n  "received": true,\n  "echo": {\n    "message": "Hola API-Wallet",\n    "timestamp": 1788996159\n  }\n}'
-      }
-    ]
-  }
-];
-
-const INITIAL_API_KEYS = [
-  {
-    id: 'key-prod-01',
-    name: 'Producción Server API Key',
-    key: 'demo_live_9f82c4e1a0b3491ca0f42398dce7412b',
-    scope: 'Full Access (Read/Write)',
-    environment: 'Producción',
-    created: '12 Ago 2026',
-    lastUsed: 'Hace 5 minutos',
-    status: 'active'
-  },
-  {
-    id: 'key-dev-02',
-    name: 'Mobile SDK Client Key',
-    key: 'demo_live_1d44bc807e12480fa7b63290e1a89c3f',
-    scope: 'Read Only',
-    environment: 'Producción',
-    created: '25 Ago 2026',
-    lastUsed: 'Hace 2 horas',
-    status: 'active'
-  },
-  {
-    id: 'key-test-03',
-    name: 'Testing & CI/CD Pipeline',
-    key: 'demo_test_7a19ff33b8a14b5190d740c0f825e981',
-    scope: 'Restricted (Auth & Misc)',
-    environment: 'Staging / Dev',
-    created: '01 Sep 2026',
-    lastUsed: 'Ayer',
-    status: 'active'
-  }
-];
-
-const INITIAL_WORKSPACES = [
-  { id: 'ws-default', name: 'Default workspace', description: 'Workspace principal de desarrollo y pruebas', isDefault: true, createdAt: 'Mayo 2026' },
-  { id: 'ws-mobile', name: 'Mobile API Workspace', description: 'Endpoints optimizados para iOS y Android', isDefault: false, createdAt: 'Junio 2026' },
-  { id: 'ws-payments', name: 'Payments & Billing Core', description: 'Microservicios de transacciones financieras', isDefault: false, createdAt: 'Julio 2026' },
-];
-
-const INITIAL_FLOWS = [
-  {
-    id: 'flow-1',
-    name: 'Auth Health Monitor',
-    targetType: 'group',
-    targetName: 'Auth Collection (3 APIs)',
-    frequency: 'Cada 1 hora',
-    intervalMinutes: 60,
-    status: 'active',
-    lastRun: 'Hace 12 min',
-    lastStatus: '200 OK',
-    latency: '34 ms',
-    successRate: '99.9%',
-    runsCount: 1420,
-    notifyOnError: true,
-  },
-  {
-    id: 'flow-2',
-    name: 'Trailers Feed CDN Check',
-    targetType: 'individual',
-    targetName: 'GET /api/v1/trailers/feed',
-    frequency: 'Cada 2 horas',
-    intervalMinutes: 120,
-    status: 'active',
-    lastRun: 'Hace 45 min',
-    lastStatus: '200 OK',
-    latency: '48 ms',
-    successRate: '100%',
-    runsCount: 710,
-    notifyOnError: true,
-  },
-  {
-    id: 'flow-3',
-    name: 'Admin Metrics Heartbeat',
-    targetType: 'individual',
-    targetName: 'GET /api/v1/admin/metrics',
-    frequency: 'Cada 30 minutos',
-    intervalMinutes: 30,
-    status: 'paused',
-    lastRun: 'Ayer',
-    lastStatus: '200 OK',
-    latency: '29 ms',
-    successRate: '98.5%',
-    runsCount: 380,
-    notifyOnError: false,
-  },
-];
-
 const WorkspaceContext = createContext(null);
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 export function WorkspaceProvider({ children }) {
-  // Theme & color customization
+  const { isAuthenticated } = useAuth();
   const [primaryTheme, setPrimaryTheme] = useState(() => {
     try {
-      const saved = localStorage.getItem(THEME_PREF_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        return parsed.primaryTheme || 'dark';
-      }
-    } catch {}
-    return 'dark';
+      return JSON.parse(localStorage.getItem(THEME_PREF_KEY) || '{}').primaryTheme || 'dark';
+    } catch {
+      return 'dark';
+    }
   });
-
   const [accentColor, setAccentColor] = useState(() => {
     try {
-      const saved = localStorage.getItem(THEME_PREF_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        return parsed.accentColor || 'purple';
-      }
-    } catch {}
-    return 'purple';
-  });
-
-  // Collections and API Keys data
-  const [collections, setCollections] = useState(() => {
-    try {
-      const saved = localStorage.getItem(WORKSPACE_STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        return parsed.collections || INITIAL_COLLECTIONS;
-      }
-    } catch {}
-    return INITIAL_COLLECTIONS;
-  });
-
-  const [apiKeys, setApiKeys] = useState(() => {
-    try {
-      const saved = localStorage.getItem(WORKSPACE_STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        return parsed.apiKeys || INITIAL_API_KEYS;
-      }
-    } catch {}
-    return INITIAL_API_KEYS;
-  });
-
-  const [workspaceName, setWorkspaceName] = useState('Default workspace');
-
-  // Workspaces list
-  const [workspaces, setWorkspaces] = useState(() => {
-    try {
-      const saved = localStorage.getItem('api-wallet-workspaces-list');
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return INITIAL_WORKSPACES;
-  });
-
-  const [activeWorkspaceId, setActiveWorkspaceId] = useState('ws-default');
-
-  // Flows list (for automated scheduled API execution & monitoring)
-  const [flows, setFlows] = useState(() => {
-    try {
-      const saved = localStorage.getItem('api-wallet-flows-list');
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return INITIAL_FLOWS;
-  });
-
-  // Persist workspaces and flows
-  useEffect(() => {
-    try {
-      localStorage.setItem('api-wallet-workspaces-list', JSON.stringify(workspaces));
-      localStorage.setItem('api-wallet-flows-list', JSON.stringify(flows));
-    } catch (e) {
-      console.error(e);
+      return JSON.parse(localStorage.getItem(THEME_PREF_KEY) || '{}').accentColor || 'purple';
+    } catch {
+      return 'purple';
     }
-  }, [workspaces, flows]);
+  });
+  const [collections, setCollections] = useState([]);
+  const [projects, setProjects] = useState([]);
+  const [apiKeys, setApiKeys] = useState([]);
+  const [workspaces, setWorkspaces] = useState([]);
+  const [flows, setFlows] = useState([]);
+  const [environments, setEnvironments] = useState([]);
+  const [workspaceDetails, setWorkspaceDetails] = useState(null);
+  const [workspaceName, setWorkspaceName] = useState('');
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState(null);
+  const [activeProjectId, setActiveProjectId] = useState(null);
 
-  // Apply theme variables dynamically to document
+  const loadWorkspace = async (workspaceId) => {
+    const projectsResponse = await fetch(`${API_URL}/api/workspaces/${workspaceId}/projects`, { credentials: 'include' });
+    if (!projectsResponse.ok) return;
+    const projects = (await projectsResponse.json()).data;
+    setProjects(projects);
+    const project = projects[0];
+    if (!project) { setActiveProjectId(null); setCollections([]); setApiKeys([]); setFlows([]); return; }
+    setActiveProjectId(project.id);
+    const [projectResponse, flowsResponse] = await Promise.all([fetch(`${API_URL}/api/projects/${project.id}`, { credentials: 'include' }), fetch(`${API_URL}/api/projects/${project.id}/flows`, { credentials: 'include' })]);
+    if (projectResponse.ok) {
+      const details = (await projectResponse.json()).data;
+      setCollections((details.collections || []).map((collection) => ({ ...collection, apis: (collection.requests || []).map((request) => ({ ...request, collectionPreRequestScript: collection.preRequestScript || '', collectionTestScript: collection.testScript || '', collectionAuthorization: collection.authorization || {} })) })));
+      setApiKeys(details.apiKeys || []);
+      setEnvironments(details.environments || []);
+    }
+    if (flowsResponse.ok) setFlows(((await flowsResponse.json()).data || []).map((flow) => ({ ...flow, status: flow.status.toLowerCase(), targetType: flow.targetType === 'REQUEST' ? 'individual' : 'group', targetName: flow.request?.name || flow.collection?.name || '', frequency: `Cada ${flow.intervalMinutes} minutos`, lastRun: flow.lastRunAt ? new Date(flow.lastRunAt).toLocaleString() : 'Nunca', lastStatus: flow.lastStatusCode ? String(flow.lastStatusCode) : 'Pendiente', latency: flow.lastLatencyMs ? `${flow.lastLatencyMs} ms` : '--' })));
+  };
+
   useEffect(() => {
-    const themeObj = PRIMARY_THEMES.find((t) => t.id === primaryTheme) || PRIMARY_THEMES[0];
-    const accentObj = ACCENT_COLORS.find((a) => a.id === accentColor) || ACCENT_COLORS[0];
+    if (!isAuthenticated) { setWorkspaces([]); setProjects([]); setCollections([]); return; }
+    fetch(`${API_URL}/api/workspaces`, { credentials: 'include' }).then(async (response) => {
+      if (!response.ok) return;
+      const items = (await response.json()).data || []; setWorkspaces(items);
+      const preferredWorkspace = items.find((workspace) => (workspace._count?.projects || 0) > 0) || items[0];
+      if (preferredWorkspace) { setActiveWorkspaceId(preferredWorkspace.id); setWorkspaceName(preferredWorkspace.name); await loadWorkspace(preferredWorkspace.id); const detailResponse = await fetch(`${API_URL}/api/workspaces/${preferredWorkspace.id}`, { credentials: 'include' }); if (detailResponse.ok) setWorkspaceDetails((await detailResponse.json()).data); }
+    }).catch(() => {});
+  }, [isAuthenticated]);
 
+  useEffect(() => {
+    const theme = PRIMARY_THEMES.find((item) => item.id === primaryTheme) || PRIMARY_THEMES[0];
+    const accent = ACCENT_COLORS.find((item) => item.id === accentColor) || ACCENT_COLORS[0];
     const root = document.documentElement;
-
-    root.setAttribute('data-theme', themeObj.isDark ? 'dark' : 'light');
-    root.setAttribute('data-workspace-theme', themeObj.id);
-    root.setAttribute('data-workspace-accent', accentObj.id);
-
-    // Apply primary colors
-    root.style.setProperty('--color-background', themeObj.bg);
-    root.style.setProperty('--color-surface', themeObj.surface);
-    root.style.setProperty('--color-surface-alt', themeObj.surfaceAlt);
-    root.style.setProperty('--color-border', themeObj.border);
-    root.style.setProperty('--color-text', themeObj.text);
-
-    // Apply accent colors
-    root.style.setProperty('--color-primary', accentObj.primary);
-    root.style.setProperty('--color-primary-hover', accentObj.hover);
-    root.style.setProperty('--color-primary-light', themeObj.isDark ? accentObj.light : accentObj.lightBg);
-
-    try {
-      localStorage.setItem(
-        THEME_PREF_KEY,
-        JSON.stringify({ primaryTheme: themeObj.id, accentColor: accentObj.id })
-      );
-    } catch (e) {
-      console.error(e);
-    }
+    root.setAttribute('data-theme', theme.isDark ? 'dark' : 'light');
+    root.setAttribute('data-workspace-theme', theme.id);
+    root.setAttribute('data-workspace-accent', accent.id);
+    root.style.setProperty('--color-background', theme.bg);
+    root.style.setProperty('--color-surface', theme.surface);
+    root.style.setProperty('--color-surface-alt', theme.surfaceAlt);
+    root.style.setProperty('--color-border', theme.border);
+    root.style.setProperty('--color-text', theme.text);
+    root.style.setProperty('--color-primary', accent.primary);
+    root.style.setProperty('--color-primary-hover', accent.hover);
+    root.style.setProperty('--color-primary-light', theme.isDark ? accent.light : accent.lightBg);
+    localStorage.setItem(THEME_PREF_KEY, JSON.stringify({ primaryTheme: theme.id, accentColor: accent.id }));
   }, [primaryTheme, accentColor]);
 
-  // Persist collections and apiKeys
-  useEffect(() => {
-    try {
-      localStorage.setItem(
-        WORKSPACE_STORAGE_KEY,
-        JSON.stringify({ collections, apiKeys, workspaceName })
-      );
-    } catch (e) {
-      console.error(e);
-    }
-  }, [collections, apiKeys, workspaceName]);
-
-  // API management
-  const addApi = (collectionId, newApi) => {
-    const apiToAdd = {
-      id: `api-${Date.now()}`,
-      name: newApi.name || 'Nuevo Endpoint',
-      method: newApi.method || 'GET',
-      path: newApi.path || '/api/v1/endpoint',
-      description: newApi.description || '',
-      headers: newApi.headers || [],
-      params: newApi.params || [],
-      body: newApi.body || '',
-      status: '200 OK',
-      responseSample: '{\n  "message": "Petición simulada exitosa"\n}',
-    };
-
-    setCollections((prev) =>
-      prev.map((col) => {
-        if (col.id === collectionId) {
-          return { ...col, apis: [...col.apis, apiToAdd] };
-        }
-        return col;
-      })
-    );
-    return apiToAdd;
+  const addApi = async (collectionId, api) => {
+    const response = await fetch(`${API_URL}/api/collections/${collectionId}/requests`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(api) });
+    if (!response.ok) throw new Error((await response.json()).message || 'No se pudo crear la API');
+    const created = (await response.json()).data;
+    setCollections((items) => items.map((item) => item.id === collectionId
+      ? { ...item, apis: [...(item.apis || []), created] }
+      : item));
+    return created;
   };
-
-  const deleteApi = (apiId) => {
-    setCollections((prev) =>
-      prev.map((col) => ({
-        ...col,
-        apis: col.apis.filter((api) => api.id !== apiId),
-      }))
-    );
+  const createBlankRequest = async (collectionId) => {
+    const collection = collections.find((item) => item.id === collectionId);
+    const existingNames = new Set((collection?.apis || []).map((item) => item.name));
+    let suffix = 1;
+    let name = `Request ${suffix}`;
+    while (existingNames.has(name)) name = `Request ${++suffix}`;
+    return addApi(collectionId, { name, method: 'GET', path: '/', url: '', description: '', headers: [], params: [], body: '' });
   };
-
-  const addCollection = (name, description) => {
-    const newCol = {
-      id: `col-${Date.now()}`,
-      name: name || 'Nueva Colección',
-      description: description || '',
-      apis: [],
-    };
-    setCollections((prev) => [...prev, newCol]);
-    return newCol;
+  const updateApi = async (apiId, changes) => {
+    const response = await fetch(`${API_URL}/api/requests/${apiId}`, { method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(changes) });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || 'No se pudo actualizar la API');
+    setCollections((items) => items.map((collection) => ({ ...collection, apis: (collection.apis || []).map((api) => api.id === apiId ? result.data : api) })));
+    return result.data;
   };
-
-  const deleteCollection = (collectionId) => {
-    setCollections((prev) => prev.filter((col) => col.id !== collectionId));
+  const updateCollection = async (collectionId, changes) => {
+    const response = await fetch(`${API_URL}/api/collections/${collectionId}`, { method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(changes) });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || 'No se pudo actualizar la colección');
+    setCollections((items) => items.map((collection) => collection.id === collectionId ? { ...collection, ...result.data, apis: (collection.apis || []).map((request) => ({ ...request, collectionPreRequestScript: result.data.preRequestScript || '', collectionTestScript: result.data.testScript || '', collectionAuthorization: result.data.authorization || {} })) } : collection));
+    return result.data;
   };
-
-  // Danger zone: Borrar APIs
-  const deleteAllApis = () => {
-    setCollections((prev) =>
-      prev.map((col) => ({
-        ...col,
-        apis: [],
-      }))
-    );
+  const deleteApi = async (apiId) => {
+    const response = await fetch(`${API_URL}/api/requests/${apiId}`, { method: 'DELETE', credentials: 'include' });
+    if (!response.ok) throw new Error('No se pudo eliminar la API');
+    setCollections((items) => items.map((item) => ({ ...item, apis: (item.apis || []).filter((api) => api.id !== apiId) })));
   };
-
-  // Danger zone: Borrar proyecto completo
-  const deleteProject = () => {
-    setCollections([]);
-    setApiKeys([]);
-    setWorkspaceName('Workspace Vacío');
+  const addCollection = async (name, description, parentId = null) => {
+    if (!activeProjectId) throw new Error('Selecciona un proyecto primero');
+    const response = await fetch(`${API_URL}/api/projects/${activeProjectId}/collections`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, description, parentId }) });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || 'No se pudo crear la colección');
+    const created = { ...result.data, apis: [] };
+    setCollections((items) => [...items, created]);
+    return created;
   };
-
-  // Reset to initial demo data
-  const restoreDefaultWorkspace = () => {
-    setCollections(INITIAL_COLLECTIONS);
-    setApiKeys(INITIAL_API_KEYS);
-    setWorkspaceName('Default workspace');
+  const createProject = async (name, description = '') => {
+    if (!activeWorkspaceId) throw new Error('Selecciona un workspace primero');
+    const response = await fetch(`${API_URL}/api/workspaces/${activeWorkspaceId}/projects`, {
+      method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, description }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || 'No se pudo crear el proyecto');
+    setProjects((items) => [result.data, ...items]);
+    return result.data;
   };
-
-  // API Keys management
-  const addApiKey = ({ name, scope, environment }) => {
-    const randomHex = Array.from({ length: 32 }, () =>
-      Math.floor(Math.random() * 16).toString(16)
-    ).join('');
-    const prefix = environment === 'Staging / Dev' ? 'sk_test_' : 'sk_live_';
-
-    const newKey = {
-      id: `key-${Date.now()}`,
-      name: name || 'Nueva API Key',
-      key: `${prefix}${randomHex}`,
-      scope: scope || 'Full Access (Read/Write)',
-      environment: environment || 'Producción',
-      created: 'Hoy',
-      lastUsed: 'Nunca',
-      status: 'active',
-    };
-
-    setApiKeys((prev) => [newKey, ...prev]);
-    return newKey;
+  const deleteCollection = async (collectionId) => {
+    const response = await fetch(`${API_URL}/api/collections/${collectionId}`, { method: 'DELETE', credentials: 'include' });
+    if (!response.ok) throw new Error('No se pudo eliminar la colección');
+    setCollections((items) => {
+      const removed = new Set([collectionId]);
+      let changed = true;
+      while (changed) { changed = false; items.forEach((item) => { if (item.parentId && removed.has(item.parentId) && !removed.has(item.id)) { removed.add(item.id); changed = true; } }); }
+      return items.filter((item) => !removed.has(item.id));
+    });
   };
-
-  const deleteApiKey = (keyId) => {
-    setApiKeys((prev) => prev.filter((k) => k.id !== keyId));
+  const deleteAllApis = async () => {
+    await Promise.all(collections.flatMap((collection) => (collection.apis || []).map((api) => deleteApi(api.id))));
   };
-
-  // Workspace Switcher and Creation
-  const createWorkspace = ({ name, description }) => {
-    const newWs = {
-      id: `ws-${Date.now()}`,
-      name: name || 'Nuevo Workspace',
-      description: description || '',
-      isDefault: false,
-      createdAt: 'Hoy',
-    };
-    setWorkspaces((prev) => [...prev, newWs]);
-    setActiveWorkspaceId(newWs.id);
-    setWorkspaceName(newWs.name);
-    return newWs;
+  const deleteProject = async () => {
+    if (!activeProjectId) return;
+    const response = await fetch(`${API_URL}/api/projects/${activeProjectId}`, { method: 'DELETE', credentials: 'include' });
+    if (!response.ok) throw new Error('No se pudo eliminar el proyecto');
+    setProjects((items) => items.filter((item) => item.id !== activeProjectId));
+    await loadWorkspace(activeWorkspaceId);
   };
-
+  const restoreDefaultWorkspace = async () => {
+    if (!activeWorkspaceId) return;
+    const current = await fetch(`${API_URL}/api/workspaces/${activeWorkspaceId}/projects`, { credentials: 'include' });
+    if (!current.ok) throw new Error('No se pudo recuperar el workspace');
+    if (!(await current.json()).data.length) await createProject('Default Project', 'Proyecto inicial restaurado');
+    await loadWorkspace(activeWorkspaceId);
+  };
+  const addApiKey = async ({ name, environment, scope }) => {
+    if (!activeProjectId) throw new Error('Selecciona un proyecto primero');
+    const response = await fetch(`${API_URL}/api/projects/${activeProjectId}/api-keys`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, prefix: environment === 'Staging / Dev' ? 'sk_test' : 'sk_live', scopes: [scope] }) });
+    if (!response.ok) throw new Error((await response.json()).message || 'No se pudo crear la API key');
+    const key = (await response.json()).data;
+    setApiKeys((items) => [key, ...items]);
+    return key;
+  };
+  const deleteApiKey = async (keyId) => {
+    const response = await fetch(`${API_URL}/api-keys/${keyId}/revoke`, { method: 'POST', credentials: 'include' });
+    if (!response.ok) throw new Error('No se pudo revocar la API key');
+    setApiKeys((items) => items.map((item) => item.id === keyId ? { ...item, status: 'REVOKED' } : item));
+  };
+  const createWorkspace = async ({ name, description }) => {
+    const response = await fetch(`${API_URL}/api/workspaces`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, description }) });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || 'No se pudo crear el workspace');
+    const workspace = result.data;
+    setWorkspaces((items) => [workspace, ...items]);
+    setActiveWorkspaceId(workspace.id); setWorkspaceName(workspace.name || ''); await loadWorkspace(workspace.id);
+    return workspace;
+  };
   const switchWorkspace = (id) => {
-    const target = workspaces.find((w) => w.id === id);
-    if (target) {
-      setActiveWorkspaceId(target.id);
-      setWorkspaceName(target.name);
+    const workspace = workspaces.find((item) => item.id === id);
+    if (workspace) {
+      setActiveWorkspaceId(id);
+      setWorkspaceName(workspace.name || '');
+      loadWorkspace(id);
+      fetch(`${API_URL}/api/workspaces/${id}`, { credentials: 'include' }).then(async (response) => { if (response.ok) setWorkspaceDetails((await response.json()).data); }).catch(() => {});
     }
   };
-
-  // Flows Management (Scheduling & Monitoring)
-  const createFlow = (flowData) => {
-    const newFlow = {
-      id: `flow-${Date.now()}`,
-      name: flowData.name || 'Nuevo Flow',
-      targetType: flowData.targetType || 'group',
-      targetName: flowData.targetName || 'Colección Completa',
-      frequency: flowData.frequency || 'Cada 1 hora',
-      intervalMinutes: flowData.intervalMinutes || 60,
-      status: 'active',
-      lastRun: 'Nunca',
-      lastStatus: 'Pendiente',
-      latency: '--',
-      successRate: '100%',
-      runsCount: 0,
-      notifyOnError: flowData.notifyOnError !== false,
-    };
-    setFlows((prev) => [newFlow, ...prev]);
-    return newFlow;
+  const createFlow = async (flow) => {
+    if (!activeProjectId) throw new Error('Selecciona un proyecto primero');
+    const collection = collections.find((item) => item.name === flow.targetName || item.id === flow.targetName);
+    const request = collections.flatMap((item) => item.apis || []).find((item) => item.id === flow.targetName);
+    const payload = flow.targetType === 'individual' ? { ...flow, targetType: 'REQUEST', requestId: request?.id } : { ...flow, targetType: 'COLLECTION', collectionId: collection?.id };
+    const response = await fetch(`${API_URL}/api/projects/${activeProjectId}/flows`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    if (!response.ok) throw new Error((await response.json()).message || 'No se pudo crear el flow');
+    const created = (await response.json()).data;
+    const normalized = { ...created, status: created.status.toLowerCase(), targetType: created.targetType === 'REQUEST' ? 'individual' : 'group', targetName: created.request?.name || created.collection?.name || flow.targetName, frequency: `Cada ${created.intervalMinutes} minutos`, lastRun: 'Nunca', lastStatus: 'Pendiente', latency: '--' };
+    setFlows((items) => [normalized, ...items]);
+    return normalized;
   };
-
-  const toggleFlowStatus = (id) => {
-    setFlows((prev) =>
-      prev.map((f) => (f.id === id ? { ...f, status: f.status === 'active' ? 'paused' : 'active' } : f))
-    );
+  const toggleFlowStatus = async (id) => {
+    const flow = flows.find((item) => item.id === id);
+    if (!flow) return;
+    const status = flow.status === 'active' ? 'PAUSED' : 'ACTIVE';
+    const response = await fetch(`${API_URL}/api/flows/${id}`, { method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) });
+    if (!response.ok) throw new Error('No se pudo actualizar el flow');
+    setFlows((items) => items.map((item) => item.id === id ? { ...item, status: status.toLowerCase() } : item));
   };
-
-  const deleteFlow = (id) => {
-    setFlows((prev) => prev.filter((f) => f.id !== id));
+  const deleteFlow = async (id) => {
+    const response = await fetch(`${API_URL}/api/flows/${id}`, { method: 'DELETE', credentials: 'include' });
+    if (!response.ok) throw new Error('No se pudo eliminar el flow');
+    setFlows((items) => items.filter((flow) => flow.id !== id));
   };
-
-  const runFlowNow = (id) => {
-    const simulatedLatency = `${Math.floor(Math.random() * 35) + 20} ms`;
-    setFlows((prev) =>
-      prev.map((f) =>
-        f.id === id
-          ? {
-              ...f,
-              lastRun: 'Hace unos segundos',
-              lastStatus: '200 OK',
-              latency: simulatedLatency,
-              runsCount: f.runsCount + 1,
-            }
-          : f
-      )
-    );
+  const runFlowNow = async (id) => {
+    const response = await fetch(`${API_URL}/api/flows/${id}/run`, { method: 'POST', credentials: 'include' });
+    if (!response.ok) throw new Error((await response.json()).message || 'No se pudo ejecutar el flow');
+    await loadWorkspace(activeWorkspaceId);
+    return (await response.json()).data;
   };
 
   return (
-    <WorkspaceContext.Provider
-      value={{
-        primaryTheme,
-        setPrimaryTheme,
-        accentColor,
-        setAccentColor,
-        collections,
-        apiKeys,
-        workspaceName,
-        setWorkspaceName,
-        workspaces,
-        activeWorkspaceId,
-        createWorkspace,
-        switchWorkspace,
-        flows,
-        createFlow,
-        toggleFlowStatus,
-        deleteFlow,
-        runFlowNow,
-        addApi,
-        deleteApi,
-        addCollection,
-        deleteCollection,
-        deleteAllApis,
-        deleteProject,
-        restoreDefaultWorkspace,
-        addApiKey,
-        deleteApiKey,
-      }}
-    >
+    <WorkspaceContext.Provider value={{
+      primaryTheme, setPrimaryTheme, accentColor, setAccentColor,
+      collections, apiKeys, workspaceName, setWorkspaceName, workspaces,
+      projects, activeWorkspaceId, activeProjectId, createWorkspace, createProject, switchWorkspace, flows, environments, workspaceDetails, createFlow,
+      toggleFlowStatus, deleteFlow, runFlowNow, addApi, createBlankRequest, deleteApi,
+      addCollection, updateApi, updateCollection, deleteCollection, deleteAllApis, deleteProject,
+      restoreDefaultWorkspace, addApiKey, deleteApiKey,
+    }}>
       {children}
     </WorkspaceContext.Provider>
   );
@@ -586,9 +243,7 @@ export function WorkspaceProvider({ children }) {
 
 export function useWorkspace() {
   const context = useContext(WorkspaceContext);
-  if (!context) {
-    throw new Error('useWorkspace must be used within a WorkspaceProvider');
-  }
+  if (!context) throw new Error('useWorkspace must be used within a WorkspaceProvider');
   return context;
 }
 

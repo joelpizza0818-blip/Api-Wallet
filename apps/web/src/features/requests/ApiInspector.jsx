@@ -1,31 +1,77 @@
 import { useState } from 'react';
+import { useWorkspace } from '../workspaces/WorkspaceContext';
 import './ApiInspector.css';
 
 function ApiInspector({ api }) {
+  const { updateApi } = useWorkspace();
   const [method, setMethod] = useState(api.method || 'GET');
-  const [url, setUrl] = useState(`https://api.apiwallet.io${api.path}`);
-  const [activeTab, setActiveTab] = useState('params'); // 'params' | 'auth' | 'headers' | 'body'
+  const [url, setUrl] = useState(api.url || '');
+  const [activeTab, setActiveTab] = useState('params');
   const [bodyContent, setBodyContent] = useState(api.body || '');
   const [isLoading, setIsLoading] = useState(false);
-  const [response, setResponse] = useState(api.responseSample || '{\n  "status": "ready"\n}');
+  const [response, setResponse] = useState(api.responseSample || '');
+  const [responseFormat, setResponseFormat] = useState('json');
   const [responseMeta, setResponseMeta] = useState({
-    status: api.status || '200 OK',
-    time: '38 ms',
-    size: '1.2 KB',
+    status: api.status || 'Ready',
+    time: '--',
+    size: '--',
   });
   const [copied, setCopied] = useState(false);
+  const [authorization, setAuthorization] = useState({ type: 'none', ...(api.collectionAuthorization || {}), ...(api.authorization || {}) });
+  const [preRequestScript, setPreRequestScript] = useState(api.preRequestScript || api.collectionPreRequestScript || '');
+  const [testScript, setTestScript] = useState(api.testScript || api.collectionTestScript || '');
+  const [saveMessage, setSaveMessage] = useState('');
 
-  const handleSend = () => {
+  const runScript = (source, pm) => {
+    if (!source.trim()) return;
+    try {
+      new Function('pm', source)(pm);
+    } catch (error) {
+      setResponse(JSON.stringify({ scriptError: error.message }, null, 2));
+      setResponseMeta((previous) => ({ ...previous, status: 'Script Error' }));
+    }
+  };
+
+  const saveRequestSettings = async () => {
+    await updateApi(api.id, { authorization, preRequestScript, testScript, body: bodyContent, method, path: url.startsWith('/') ? url : api.path, url, name: api.name });
+    setSaveMessage('Guardado');
+    setTimeout(() => setSaveMessage(''), 1800);
+  };
+
+  const handleSend = async () => {
     setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
-      setResponse(api.responseSample || '{\n  "status": "success",\n  "message": "Solicitud procesada con éxito"\n}');
+    const startedAt = performance.now();
+    try {
+      if (!url.trim()) throw new Error('Introduce la URL completa del endpoint.');
+      const variables = {};
+      const scriptState = { variables: { set: (key, value) => { variables[key] = String(value); }, get: (key) => variables[key] }, request: { method, url, headers: { add: ({ key, value }) => { if (key) headers[key] = value; } } }, response: null };
+      let headers = Object.fromEntries((api.headers || []).filter((item) => item.key).map((item) => [item.key, item.value || '']));
+      runScript(preRequestScript, { ...scriptState, setNextRequest: () => {} });
+      const query = new URLSearchParams((api.params || []).filter((item) => item.key && item.value).map((item) => [item.key, item.value]));
+      const targetUrl = query.toString() ? `${url}${url.includes('?') ? '&' : '?'}${query}` : url;
+      if (authorization.type === 'bearer' && authorization.token) headers.Authorization = `Bearer ${authorization.token}`;
+      if (authorization.type === 'apikey' && authorization.key) headers[authorization.key] = authorization.value || '';
+      if (authorization.type === 'basic' && authorization.username) headers.Authorization = `Basic ${btoa(`${authorization.username}:${authorization.password || ''}`)}`;
+      if (authorization.type === 'oauth2' && authorization.token) headers.Authorization = `Bearer ${authorization.token}`;
+      const result = await fetch(targetUrl, { method, headers, body: !['GET', 'HEAD'].includes(method) && bodyContent ? bodyContent : undefined });
+      const text = await result.text();
+      let formatted = text;
+      if (responseFormat === 'json') { try { formatted = JSON.stringify(JSON.parse(text), null, 2); } catch {} }
+      if (responseFormat === 'html') formatted = text;
+      setResponse(formatted);
       setResponseMeta({
-        status: method === 'POST' ? '201 Created' : '200 OK',
-        time: `${Math.floor(Math.random() * 40) + 25} ms`,
-        size: '1.4 KB',
+        status: `${result.status} ${result.statusText}`,
+        time: `${Math.round(performance.now() - startedAt)} ms`,
+        size: `${new Blob([text]).size} B`,
       });
-    }, 350);
+      const test = (name, passed) => { if (!passed) throw new Error(name || 'Test failed'); };
+      runScript(testScript, { test, expect: (value, message) => ({ to: { eql: (expected) => { if (value !== expected) throw new Error(message || `Expected ${value} to equal ${expected}`); } } }), response: { status: result.status, code: result.status, body: text, text: () => text } });
+    } catch (error) {
+      setResponse(JSON.stringify({ error: error.message }, null, 2));
+      setResponseMeta({ status: 'Error', time: `${Math.round(performance.now() - startedAt)} ms`, size: '--' });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleCopyResponse = () => {
@@ -57,7 +103,7 @@ function ApiInspector({ api }) {
           className="wb-url-input"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          placeholder="https://api.apiwallet.io/v1/resource"
+          placeholder="https://api.example.com/v1/resource"
         />
 
         <button
@@ -78,6 +124,7 @@ function ApiInspector({ api }) {
             </>
           )}
         </button>
+        <button type="button" className="wb-copy-btn" onClick={saveRequestSettings}>{saveMessage || 'Guardar'}</button>
       </div>
 
       {/* Endpoint Description Info */}
@@ -102,6 +149,10 @@ function ApiInspector({ api }) {
           onClick={() => setActiveTab('auth')}
         >
           Authorization
+        </button>
+
+        <button type="button" className={`wb-req-tab ${activeTab === 'scripts' ? 'wb-req-tab--active' : ''}`} onClick={() => setActiveTab('scripts')}>
+          Scripts {(preRequestScript || testScript) && <span className="wb-tab-dot" />}
         </button>
 
         <button
@@ -158,18 +209,24 @@ function ApiInspector({ api }) {
           <div className="wb-auth-panel">
             <div className="wb-auth-type-row">
               <span className="wb-auth-label">Tipo de Autenticación:</span>
-              <select className="wb-auth-select" defaultValue="bearer">
-                <option value="bearer">Bearer Token (JWT)</option>
+              <select className="wb-auth-select" value={authorization.type} onChange={(event) => setAuthorization({ ...authorization, type: event.target.value })}>
+                <option value="none">No Auth</option>
+                <option value="bearer">Bearer Token</option>
                 <option value="apikey">API Key Header</option>
                 <option value="basic">Basic Auth</option>
-                <option value="none">No Auth</option>
+                <option value="oauth2">OAuth 2.0 Bearer</option>
               </select>
             </div>
+            {authorization.type === 'bearer' || authorization.type === 'oauth2' ? <input className="wb-url-input" type="password" placeholder="Token de acceso" value={authorization.token || ''} onChange={(event) => setAuthorization({ ...authorization, token: event.target.value })} /> : null}
+            {authorization.type === 'apikey' ? <div className="wb-auth-fields"><input className="wb-url-input" placeholder="Nombre del header" value={authorization.key || ''} onChange={(event) => setAuthorization({ ...authorization, key: event.target.value })} /><input className="wb-url-input" type="password" placeholder="Valor de la API key" value={authorization.value || ''} onChange={(event) => setAuthorization({ ...authorization, value: event.target.value })} /></div> : null}
+            {authorization.type === 'basic' ? <div className="wb-auth-fields"><input className="wb-url-input" placeholder="Usuario" value={authorization.username || ''} onChange={(event) => setAuthorization({ ...authorization, username: event.target.value })} /><input className="wb-url-input" type="password" placeholder="Contraseña" value={authorization.password || ''} onChange={(event) => setAuthorization({ ...authorization, password: event.target.value })} /></div> : null}
             <div className="wb-auth-desc">
-              Esta petición hereda la autorización configurada para la colección o utiliza las API Keys activas en el workspace.
+              La autorización se guarda en esta request y se aplica al ejecutar la petición.
             </div>
           </div>
         )}
+
+        {activeTab === 'scripts' && <div className="wb-body-panel"><label>Before request<textarea className="wb-body-textarea" rows={6} value={preRequestScript} onChange={(event) => setPreRequestScript(event.target.value)} placeholder="pm.variables = { token: '...' };" /></label><label>After response<textarea className="wb-body-textarea" rows={6} value={testScript} onChange={(event) => setTestScript(event.target.value)} placeholder="pm.expect(pm.response.status).to.eql(200);" /></label></div>}
 
         {activeTab === 'headers' && (
           <div className="wb-table-wrap">
@@ -224,6 +281,7 @@ function ApiInspector({ api }) {
             <span className="wb-status-tag">{responseMeta.status}</span>
             <span className="wb-stat-pill">Tiempo: {responseMeta.time}</span>
             <span className="wb-stat-pill">Tamaño: {responseMeta.size}</span>
+            <label className="wb-response-format">Formato <select value={responseFormat} onChange={(event) => setResponseFormat(event.target.value)}><option value="json">JSON</option><option value="raw">Raw / texto</option><option value="html">HTML</option></select></label>
           </div>
 
           <button

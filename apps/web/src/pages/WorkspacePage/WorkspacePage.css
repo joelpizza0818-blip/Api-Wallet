@@ -13,6 +13,7 @@
   flex: 1;
   height: calc(100vh - 48px);
   overflow: hidden;
+  min-width: 0;
 }
 
 /* Center Canvas */
@@ -22,6 +23,7 @@
   flex-direction: column;
   height: 100%;
   overflow: hidden;
+  min-width: 0;
   background-color: var(--color-background);
 }
 
@@ -149,5 +151,39 @@
 .wb-canvas-content {
   flex: 1;
   height: calc(100% - 38px);
-  overflow: hidden;
+  overflow: auto;
+  min-height: 0;
+}
+
+.wb-context-menu {
+  position: fixed;
+  z-index: 2500;
+  display: grid;
+  min-width: 190px;
+  padding: 5px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-xl);
+}
+
+.wb-context-menu button {
+  padding: 9px 11px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.wb-context-menu button:hover { background: var(--color-surface-alt); color: var(--color-primary); }
+.wb-context-menu .wb-context-menu-danger { color: var(--color-danger); }
+
+@media (max-width: 900px) {
+  .wb-main-container { overflow: auto; }
+  .wb-sidebar { min-width: 250px; }
+  .wb-canvas { min-width: 620px; }
 }

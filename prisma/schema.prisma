@@ -1,0 +1,418 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../server/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AuthProvider {
+  LOCAL
+  GOOGLE
+  GITHUB
+}
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  INVITED
+}
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  DEVELOPER
+  QA
+  VIEWER
+}
+enum WorkspaceMemberStatus {
+  ACTIVE
+  INVITED
+  REMOVED
+}
+enum ProjectStatus {
+  ACTIVE
+  ARCHIVED
+}
+enum ApiKeyStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+enum FlowStatus {
+  ACTIVE
+  PAUSED
+}
+enum FlowTargetType {
+  COLLECTION
+  REQUEST
+}
+enum DocumentType {
+  MARKDOWN
+  OPENAPI
+  OTHER
+}
+enum DocumentStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+enum MockStatus {
+  ACTIVE
+  PAUSED
+}
+enum ActivityType {
+  PROJECT_CREATED
+  PROJECT_UPDATED
+  COLLECTION_CREATED
+  REQUEST_CREATED
+  REQUEST_UPDATED
+  API_KEY_CREATED
+  MEMBER_INVITED
+  ENVIRONMENT_CREATED
+  SECRET_CREATED
+  FLOW_RUN
+}
+
+model User {
+  id String @id @default(cuid())
+  name String
+  email String @unique
+  passwordHash String?
+  googleId String? @unique
+  githubId String? @unique
+  avatarUrl String?
+  provider AuthProvider @default(LOCAL)
+  status UserStatus @default(ACTIVE)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  memberships WorkspaceMember[]
+  ownedWorkspaces Workspace[] @relation("WorkspaceOwner")
+  createdApiKeys ApiKey[] @relation("ApiKeyCreator")
+  sessions Session[]
+  invitationsSent WorkspaceInvitation[] @relation("InvitationSender")
+  invitationsReceived WorkspaceInvitation[] @relation("InvitationRecipient")
+  activities Activity[]
+  notifications Notification[]
+  preferences UserPreference?
+  @@index([status])
+  @@map("users")
+}
+
+model UserPreference {
+  userId String @id
+  primaryTheme String @default("dark")
+  accentColor String @default("purple")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@map("user_preferences")
+}
+
+model Workspace {
+  id String @id @default(cuid())
+  name String
+  slug String @unique
+  description String?
+  inviteCode String @unique @default(cuid())
+  plan String @default("DEVELOPER")
+  ownerId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  owner User @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  members WorkspaceMember[]
+  projects Project[]
+  invitations WorkspaceInvitation[]
+  activities Activity[]
+  notifications Notification[]
+  @@index([ownerId])
+  @@map("workspaces")
+}
+
+model WorkspaceMember {
+  workspaceId String
+  userId String
+  role WorkspaceRole @default(DEVELOPER)
+  status WorkspaceMemberStatus @default(ACTIVE)
+  joinedAt DateTime @default(now())
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@id([workspaceId, userId])
+  @@index([userId, status])
+  @@map("workspace_members")
+}
+
+model WorkspaceInvitation {
+  id String @id @default(cuid())
+  workspaceId String
+  email String
+  role WorkspaceRole @default(DEVELOPER)
+  tokenHash String @unique
+  invitedById String
+  acceptedById String?
+  expiresAt DateTime
+  acceptedAt DateTime?
+  createdAt DateTime @default(now())
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  invitedBy User @relation("InvitationSender", fields: [invitedById], references: [id], onDelete: Restrict)
+  acceptedBy User? @relation("InvitationRecipient", fields: [acceptedById], references: [id], onDelete: SetNull)
+  @@unique([workspaceId, email])
+  @@index([email, expiresAt])
+  @@map("workspace_invitations")
+}
+
+model Project {
+  id String @id @default(cuid())
+  workspaceId String
+  name String
+  description String?
+  status ProjectStatus @default(ACTIVE)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  collections Collection[]
+  environments Environment[]
+  apiKeys ApiKey[]
+  flows Flow[]
+  documents Document[]
+  mocks MockServer[]
+  @@unique([workspaceId, name])
+  @@index([workspaceId, status])
+  @@map("projects")
+}
+
+model Collection {
+  id String @id @default(cuid())
+  projectId String
+  parentId String?
+  name String
+  description String?
+  authorization Json @default("{}")
+  preRequestScript String?
+  testScript String?
+  sortOrder Int @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parent Collection? @relation("CollectionHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children Collection[] @relation("CollectionHierarchy")
+  requests ApiRequest[]
+  flows Flow[] @relation("CollectionFlows")
+  @@unique([projectId, name])
+  @@index([projectId, sortOrder])
+  @@index([parentId])
+  @@map("collections")
+}
+
+model ApiRequest {
+  id String @id @default(cuid())
+  collectionId String
+  name String
+  method String
+  path String
+  url String?
+  description String?
+  headers Json @default("[]")
+  params Json @default("[]")
+  body String?
+  responseSample String?
+  authorization Json @default("{}")
+  preRequestScript String?
+  testScript String?
+  lastStatusCode Int?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  flows Flow[] @relation("RequestFlows")
+  mockRoutes MockRoute[]
+  executions RequestExecution[]
+  @@unique([collectionId, name])
+  @@index([collectionId, method])
+  @@index([path])
+  @@map("api_requests")
+}
+
+model Environment {
+  id String @id @default(cuid())
+  projectId String
+  name String
+  slug String
+  baseUrl String?
+  isDefault Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  secrets Secret[]
+  @@unique([projectId, slug])
+  @@index([projectId, isDefault])
+  @@map("environments")
+}
+
+model Secret {
+  id String @id @default(cuid())
+  environmentId String
+  name String
+  encryptedValue String
+  encryptionKeyVersion Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  environment Environment @relation(fields: [environmentId], references: [id], onDelete: Cascade)
+  @@unique([environmentId, name])
+  @@map("secrets")
+}
+
+model ApiKey {
+  id String @id @default(cuid())
+  projectId String
+  name String
+  prefix String
+  keyHash String @unique
+  lastFourCharacters String
+  scopes Json @default("[]")
+  status ApiKeyStatus @default(ACTIVE)
+  createdById String
+  lastUsedAt DateTime?
+  expiresAt DateTime?
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy User @relation("ApiKeyCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  executions RequestExecution[]
+  @@index([projectId, status])
+  @@index([createdById])
+  @@map("api_keys")
+}
+
+model Flow {
+  id String @id @default(cuid())
+  projectId String
+  collectionId String?
+  requestId String?
+  name String
+  targetType FlowTargetType
+  intervalMinutes Int
+  status FlowStatus @default(ACTIVE)
+  notifyOnError Boolean @default(true)
+  lastRunAt DateTime?
+  lastStatusCode Int?
+  lastLatencyMs Int?
+  runsCount Int @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  collection Collection? @relation("CollectionFlows", fields: [collectionId], references: [id], onDelete: Cascade)
+  request ApiRequest? @relation("RequestFlows", fields: [requestId], references: [id], onDelete: Cascade)
+  executions RequestExecution[]
+  @@unique([projectId, name])
+  @@index([projectId, status])
+  @@index([collectionId])
+  @@index([requestId])
+  @@map("flows")
+}
+
+model RequestExecution {
+  id String @id @default(cuid())
+  requestId String
+  apiKeyId String?
+  flowId String?
+  statusCode Int?
+  latencyMs Int?
+  responseBody String?
+  errorMessage String?
+  executedAt DateTime @default(now())
+  request ApiRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  apiKey ApiKey? @relation(fields: [apiKeyId], references: [id], onDelete: SetNull)
+  flow Flow? @relation(fields: [flowId], references: [id], onDelete: SetNull)
+  @@index([requestId, executedAt])
+  @@index([flowId, executedAt])
+  @@map("request_executions")
+}
+
+model Session {
+  id String @id @default(cuid())
+  userId String
+  tokenHash String @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, expiresAt])
+  @@map("sessions")
+}
+
+model Document {
+  id String @id @default(cuid())
+  projectId String
+  name String
+  type DocumentType @default(MARKDOWN)
+  content String
+  status DocumentStatus @default(DRAFT)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  @@unique([projectId, name])
+  @@index([projectId, status])
+  @@map("documents")
+}
+
+model MockServer {
+  id String @id @default(cuid())
+  projectId String
+  name String
+  slug String
+  port Int?
+  status MockStatus @default(ACTIVE)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  routes MockRoute[]
+  @@unique([projectId, slug])
+  @@index([projectId, status])
+  @@map("mock_servers")
+}
+
+model MockRoute {
+  id String @id @default(cuid())
+  mockServerId String
+  requestId String?
+  method String
+  path String
+  statusCode Int @default(200)
+  responseHeaders Json @default("[]")
+  responseBody String?
+  mockServer MockServer @relation(fields: [mockServerId], references: [id], onDelete: Cascade)
+  request ApiRequest? @relation(fields: [requestId], references: [id], onDelete: SetNull)
+  @@unique([mockServerId, method, path])
+  @@index([requestId])
+  @@map("mock_routes")
+}
+
+model Activity {
+  id String @id @default(cuid())
+  workspaceId String
+  userId String?
+  type ActivityType
+  entityType String
+  entityId String
+  metadata Json @default("{}")
+  createdAt DateTime @default(now())
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  @@index([workspaceId, createdAt])
+  @@index([entityType, entityId])
+  @@map("activities")
+}
+
+model Notification {
+  id String @id @default(cuid())
+  workspaceId String
+  userId String
+  title String
+  message String
+  readAt DateTime?
+  createdAt DateTime @default(now())
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, readAt, createdAt])
+  @@map("notifications")
+}

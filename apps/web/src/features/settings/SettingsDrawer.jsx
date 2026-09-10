@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWorkspace } from '../workspaces/WorkspaceContext';
 import { PRIMARY_THEMES, ACCENT_COLORS } from '../workspaces/themeConstants';
@@ -14,13 +14,6 @@ const AVATAR_PRESETS = [
   'https://api.dicebear.com/7.x/bottts/svg?seed=Quantum',
 ];
 
-const INITIAL_TEAM = [
-  { id: 'm-1', name: 'Alex Dev', email: 'alex@apiwallet.io', role: 'Owner / Admin', badge: 'role-owner', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Alex' },
-  { id: 'm-2', name: 'Joel M.', email: 'joel@apiwallet.io', role: 'Lead Backend Engineer', badge: 'role-admin', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Joel' },
-  { id: 'm-3', name: 'Sofia R.', email: 'sofia@apiwallet.io', role: 'API Developer', badge: 'role-dev', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Sofia' },
-  { id: 'm-4', name: 'Carlos T.', email: 'carlos@apiwallet.io', role: 'QA Tester', badge: 'role-qa', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Carlos' },
-];
-
 function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteProject }) {
   const navigate = useNavigate();
   const {
@@ -29,19 +22,32 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
     accentColor,
     setAccentColor,
     restoreDefaultWorkspace,
+    activeWorkspaceId,
   } = useWorkspace();
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
   const { user, updateProfile, changePassword, logout } = useAuth();
 
   const [activeTab, setActiveTab] = useState('workspace'); // 'workspace' | 'teamwork' | 'profile'
 
   // Teamwork state
-  const [projectInviteCode, setProjectInviteCode] = useState('PRJ-WALLET-7894-INV');
+  const [projectInviteCode, setProjectInviteCode] = useState('');
   const [codeCopied, setCodeCopied] = useState(false);
-  const [teamMembers, setTeamMembers] = useState(INITIAL_TEAM);
+  const [teamMembers, setTeamMembers] = useState([]);
   const [newMemberEmail, setNewMemberEmail] = useState('');
   const [newMemberRole, setNewMemberRole] = useState('API Developer');
   const [teamMsg, setTeamMsg] = useState('');
+  const [joinCode, setJoinCode] = useState('');
+
+  useEffect(() => {
+    if (!isOpen || !activeWorkspaceId) return;
+    fetch(`${API_URL}/api/workspaces/${activeWorkspaceId}`, { credentials: 'include' }).then(async (response) => {
+      if (!response.ok) return;
+      const workspace = (await response.json()).data;
+      setProjectInviteCode(workspace.inviteCode || '');
+      setTeamMembers((workspace.members || []).map((member) => ({ id: member.userId, name: member.user.name, email: member.user.email, role: member.role, badge: member.role === 'ADMIN' || member.role === 'OWNER' ? 'role-admin' : member.role === 'QA' ? 'role-qa' : 'role-dev', avatar: member.user.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(member.user.email)}` })));
+    }).catch(() => {});
+  }, [isOpen, activeWorkspaceId]);
 
   // Profile Form state
   const [profileName, setProfileName] = useState(user?.name || '');
@@ -64,47 +70,49 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
     setTimeout(() => setCodeCopied(false), 2000);
   };
 
-  const handleRegenerateCode = () => {
-    const randomStr = Math.random().toString(36).substring(2, 6).toUpperCase();
-    const randomNum = Math.floor(1000 + Math.random() * 9000);
-    const newCode = `PRJ-${randomStr}-${randomNum}-INV`;
-    setProjectInviteCode(newCode);
-    setTeamMsg('¡Nuevo código de invitación generado!');
+  const handleRegenerateCode = async () => {
+    const response = await fetch(`${API_URL}/api/workspaces/${activeWorkspaceId}`, { method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ regenerateInviteCode: true }) });
+    const result = await response.json();
+    if (!response.ok) { setTeamMsg(result.message || 'No se pudo regenerar el código.'); return; }
+    setProjectInviteCode(result.data.inviteCode);
+    setTeamMsg('Nuevo código de invitación generado.');
     setTimeout(() => setTeamMsg(''), 3000);
   };
 
-  const handleAddMember = (e) => {
-    e.preventDefault();
-    if (!newMemberEmail.trim()) return;
-
-    const newMember = {
-      id: `m-${Date.now()}`,
-      name: newMemberEmail.split('@')[0],
-      email: newMemberEmail,
-      role: newMemberRole,
-      badge: newMemberRole === 'Admin' ? 'role-admin' : newMemberRole === 'QA Tester' ? 'role-qa' : 'role-dev',
-      avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(newMemberEmail)}`,
-    };
-
-    setTeamMembers((prev) => [...prev, newMember]);
-    setTeamMsg(`¡Invitación enviada a ${newMemberEmail}!`);
-    setNewMemberEmail('');
-    setTimeout(() => setTeamMsg(''), 3500);
+  const handleJoinWorkspace = async (event) => {
+    event.preventDefault();
+    const response = await fetch(`${API_URL}/api/workspaces/join-code`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: joinCode }) });
+    const result = await response.json();
+    if (!response.ok) { setTeamMsg(result.message || 'No se pudo unir al workspace.'); return; }
+    setJoinCode('');
+    setTeamMsg(`Te uniste a ${result.data.workspaceName}. Actualizando tus workspaces…`);
+    setTimeout(() => window.location.reload(), 700);
   };
 
-  const handleSaveProfile = (e) => {
+  const handleAddMember = async (e) => {
+    e.preventDefault();
+    if (!newMemberEmail.trim()) return;
+    const roleMap = { Admin: 'ADMIN', 'API Developer': 'DEVELOPER', 'QA Tester': 'QA', Viewer: 'VIEWER' };
+    try {
+      const response = await fetch(`${API_URL}/api/workspaces/${activeWorkspaceId}/invitations`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: newMemberEmail, role: roleMap[newMemberRole] || 'VIEWER' }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || 'No se pudo enviar la invitación');
+      setTeamMsg(result.data.delivery?.delivered ? `Invitación enviada a ${newMemberEmail}.` : 'La invitación fue creada; configura SMTP para enviar correo externo.');
+      setNewMemberEmail('');
+    } catch (error) { setTeamMsg(error.message); }
+  };
+
+  const handleSaveProfile = async (e) => {
     e.preventDefault();
     const finalAvatar = customAvatarUrl.trim() || selectedAvatar;
-    updateProfile({
-      name: profileName,
-      email: profileEmail,
-      avatar: finalAvatar,
-    });
-    setProfileSavedMsg('¡Perfil actualizado con éxito!');
+    try {
+      await updateProfile({ name: profileName, avatar: finalAvatar });
+      setProfileSavedMsg('¡Perfil actualizado con éxito!');
+    } catch (error) { setProfileSavedMsg(error.message); }
     setTimeout(() => setProfileSavedMsg(''), 3000);
   };
 
-  const handleChangePassword = (e) => {
+  const handleChangePassword = async (e) => {
     e.preventDefault();
     setPasswordMsg({ type: '', text: '' });
 
@@ -121,7 +129,7 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
       return;
     }
 
-    const res = changePassword({ currentPassword, newPassword });
+    const res = await changePassword({ currentPassword, newPassword });
     if (res.success) {
       setPasswordMsg({ type: 'success', text: res.message });
       setCurrentPassword('');
@@ -393,6 +401,17 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
                   <span className="wb-link-label">Enlace directo:</span>
                   <code className="wb-link-code">https://apiwallet.io/join/{projectInviteCode}</code>
                 </div>
+              </div>
+
+              <div className="wb-settings-card">
+                <div className="wb-card-heading">
+                  <h3>Unirse a otro Workspace</h3>
+                  <p>Introduce un código compartido por un administrador para entrar al equipo.</p>
+                </div>
+                <form onSubmit={handleJoinWorkspace} className="wb-profile-form">
+                  <div className="wb-field-group"><label htmlFor="workspace-join-code">Código del Workspace</label><input id="workspace-join-code" placeholder="Pega aquí el código" value={joinCode} onChange={(event) => setJoinCode(event.target.value)} required /></div>
+                  <button type="submit" className="btn btn--primary btn--md wb-save-btn">Unirme al Workspace</button>
+                </form>
               </div>
 
               {/* Members Count & Team Roles */}

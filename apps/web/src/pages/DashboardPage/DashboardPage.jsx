@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import logo from '../../assets/logo.svg';
 import UserProfileBubble from '../../components/common/UserProfileBubble/UserProfileBubble';
 import { useAuth } from '../../features/auth/AuthContext';
 import { useWorkspace } from '../../features/workspaces/WorkspaceContext';
 import SettingsDrawer from '../../features/settings/SettingsDrawer';
+import { useFeedback } from '../../components/common/Feedback/FeedbackContext';
 import './DashboardPage.css';
 
 function DashboardIcon({ name, size = 16 }) {
@@ -34,51 +35,71 @@ function DashboardIcon({ name, size = 16 }) {
   );
 }
 
-const DEFAULT_PROJECTS = [
-  { id: 'proj-1', name: 'Core API Gateway', description: 'Servicios de autenticación, usuarios y enrutamiento central', apis: 14, keys: 6, status: 'Activo', updated: 'Hace 1 hora' },
-  { id: 'proj-2', name: 'Payment & Billing Vault', description: 'Integración con pasarelas de pago, webhooks y facturación', apis: 8, keys: 12, status: 'Activo', updated: 'Hace 3 horas' },
-  { id: 'proj-3', name: 'Streaming & Trailers Feed', description: 'Catálogo multimedia, compresión de video y CDN', apis: 6, keys: 4, status: 'Activo', updated: 'Ayer' },
-  { id: 'proj-4', name: 'Notification Service', description: 'Push notifications, SMS y emails transaccionales', apis: 5, keys: 8, status: 'Activo', updated: 'Hace 2 días' },
-  { id: 'proj-5', name: 'Mobile App Client SDK', description: 'Endpoints optimizados para clientes iOS y Android', apis: 9, keys: 5, status: 'Activo', updated: 'Hace 3 días' },
-  { id: 'proj-6', name: 'Admin Operations Suite', description: 'Métricas, auditoría de usuarios y logs del sistema', apis: 7, keys: 3, status: 'En revisión', updated: 'Hace 4 días' },
-];
-
-const INITIAL_ACTIVITIES = [
-  { id: 1, user: 'Joel M.', action: 'creó la API', target: 'Payment Webhook', time: 'Hace 10 min', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Joel' },
-  { id: 2, user: 'Alex Dev', action: 'actualizó el proyecto', target: 'Core API Gateway', time: 'Hace 1 hora', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Alex' },
-  { id: 3, user: 'Sofia R.', action: 'generó la API Key', target: 'sk_live_mobile_sdk_99', time: 'Hace 3 horas', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Sofia' },
-  { id: 4, user: 'Carlos T.', action: 'invitó al miembro', target: 'laura@team.io', time: 'Ayer', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Carlos' },
-  { id: 5, user: 'Joel M.', action: 'desplegó el entorno', target: 'Staging-v2', time: 'Hace 2 días', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Joel' },
-];
-
-const TEAM_MEMBERS = [
-  { id: 'm-1', name: 'Alex Dev', email: 'alex@apiwallet.io', role: 'Owner / Admin', badgeClass: 'role-owner', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Alex' },
-  { id: 'm-2', name: 'Joel M.', email: 'joel@apiwallet.io', role: 'Lead Backend Engineer', badgeClass: 'role-admin', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Joel' },
-  { id: 'm-3', name: 'Sofia R.', email: 'sofia@apiwallet.io', role: 'API Developer', badgeClass: 'role-dev', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Sofia' },
-  { id: 'm-4', name: 'Carlos T.', email: 'carlos@apiwallet.io', role: 'QA Tester', badgeClass: 'role-qa', avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Carlos' },
-];
+const INITIAL_ACTIVITIES = [];
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 function DashboardPage() {
   const { user } = useAuth();
-  const { workspaceName, apiKeys } = useWorkspace();
+  const { workspaceName, apiKeys, projects, collections, environments, workspaceDetails, createProject, activeWorkspaceId } = useWorkspace();
   const navigate = useNavigate();
+  const { notify } = useFeedback();
 
   // Active section in sidebar: 'overview' | 'projects' | 'apis' | 'environments' | 'secrets' | 'team-members' | 'team-invites'
   const [activeNav, setActiveNav] = useState('overview');
   const [teamOpen, setTeamOpen] = useState(true);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
+  const [projectForm, setProjectForm] = useState({ name: '', description: '' });
+  const [projectError, setProjectError] = useState('');
 
   // Invite state
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteSentMsg, setInviteSentMsg] = useState('');
+  const [invitations, setInvitations] = useState([]);
+  const [myInvitations, setMyInvitations] = useState([]);
+  const members = workspaceDetails?.members || [];
+  const allApis = useMemo(() => collections.flatMap((collection) => (collection.apis || []).map((api) => ({ ...api, collectionName: collection.name }))), [collections]);
 
-  const handleSendInvite = (e) => {
+  useEffect(() => {
+    if (!activeWorkspaceId) return;
+    fetch(`${API_URL}/api/workspaces/${activeWorkspaceId}/invitations`, { credentials: 'include' }).then(async (response) => { if (response.ok) setInvitations((await response.json()).data || []); }).catch(() => {});
+  }, [activeWorkspaceId, inviteSentMsg]);
+
+  useEffect(() => {
+    fetch(`${API_URL}/api/invitations/mine`, { credentials: 'include' }).then(async (response) => { if (response.ok) setMyInvitations((await response.json()).data || []); }).catch(() => {});
+  }, []);
+
+  const handleSendInvite = async (e) => {
     e.preventDefault();
     if (!inviteEmail.trim()) return;
-    setInviteSentMsg(`¡Invitación enviada a ${inviteEmail}!`);
+    const role = new FormData(e.currentTarget).get('role') || 'DEVELOPER';
+    const response = await fetch(`${API_URL}/api/workspaces/${activeWorkspaceId}/invitations`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: inviteEmail, role: role.toUpperCase() }) });
+    const result = await response.json();
+    if (!response.ok) { setInviteSentMsg(result.message || 'No se pudo enviar la invitación.'); return; }
+    setInviteSentMsg(result.data.delivery?.delivered ? `Invitación enviada a ${inviteEmail}.` : `Invitación preparada para ${inviteEmail}; configura SMTP para entrega externa.`);
     setInviteEmail('');
-    setTimeout(() => setInviteSentMsg(''), 3500);
+  };
+
+  const handleCreateProject = async (event) => {
+    event.preventDefault();
+    setProjectError('');
+    try {
+      await createProject(projectForm.name, projectForm.description);
+      setProjectForm({ name: '', description: '' });
+      setIsProjectModalOpen(false);
+    } catch (error) {
+      setProjectError(error.message);
+    }
+  };
+
+  const handleAcceptInvitation = async (invitationId) => {
+    const response = await fetch(`${API_URL}/api/invitations/${invitationId}/accept`, { method: 'POST', credentials: 'include' });
+    const result = await response.json();
+    if (!response.ok) { notify(result.message || 'No se pudo aceptar la invitación.', 'error'); return; }
+    notify('Te uniste al workspace.');
+    setMyInvitations((items) => items.filter((item) => item.id !== invitationId));
+    window.location.reload();
   };
 
   return (
@@ -88,7 +109,7 @@ function DashboardPage() {
         <div className="dash-topbar__left">
           <Link to="/" className="dash-brand" title="API-Wallet Home">
             <img src={logo} alt="Logo" className="dash-logo" />
-            <span className="dash-brand-name">API Vault</span>
+            <span className="dash-brand-name">Api-Wallet</span>
           </Link>
           <span className="dash-badge-pro">Workspace Cloud</span>
         </div>
@@ -115,38 +136,16 @@ function DashboardPage() {
                 <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
                 <path d="M13.73 21a2 2 0 0 1-3.46 0" />
               </svg>
-              <span className="dash-notif-badge">3</span>
+              {(invitations.length + myInvitations.length) > 0 && <span className="dash-notif-badge">{invitations.length + myInvitations.length}</span>}
             </button>
 
             {notificationsOpen && (
               <div className="dash-notif-dropdown">
                 <div className="dash-notif-dropdown-header">
                   <span>Notificaciones recientes</span>
-                  <span className="dash-notif-count">3 nuevas</span>
+                  <span className="dash-notif-count">{invitations.length} pendientes</span>
                 </div>
-                <div className="dash-notif-list">
-                  <div className="dash-notif-item">
-                    <span className="dash-notif-dot" />
-                    <div>
-                      <p><strong>Joel M.</strong> agregó el endpoint <code>/auth/verify</code></p>
-                      <small>Hace 10 minutos</small>
-                    </div>
-                  </div>
-                  <div className="dash-notif-item">
-                    <span className="dash-notif-dot" />
-                    <div>
-                      <p>API Key <strong>sk_live_prod</strong> fue utilizada desde AWS</p>
-                      <small>Hace 45 minutos</small>
-                    </div>
-                  </div>
-                  <div className="dash-notif-item">
-                    <span className="dash-notif-dot" />
-                    <div>
-                      <p>Mantenimiento de la base de datos completado</p>
-                      <small>Ayer</small>
-                    </div>
-                  </div>
-                </div>
+                  <div className="dash-notif-list"><p>No hay notificaciones.</p></div>
               </div>
             )}
           </div>
@@ -199,7 +198,7 @@ function DashboardPage() {
                 <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
               </svg>
               <span>Projects</span>
-              <span className="dash-nav-badge">12</span>
+              <span className="dash-nav-badge">{projects.length}</span>
             </button>
 
             <button
@@ -268,7 +267,7 @@ function DashboardPage() {
                     onClick={() => setActiveNav('team-members')}
                   >
                     <span>Members</span>
-                    <span className="dash-nav-badge">4</span>
+                    <span className="dash-nav-badge">{members.length}</span>
                   </button>
 
                   <button
@@ -344,8 +343,8 @@ function DashboardPage() {
                     <span className="dash-stat-label">Projects</span>
                     <span className="dash-stat-icon dash-stat-icon--purple"><DashboardIcon name="folder" /></span>
                   </div>
-                  <span className="dash-stat-number">12</span>
-                  <span className="dash-stat-desc">+2 nuevos este mes</span>
+                  <span className="dash-stat-number">{projects.length}</span>
+                  <span className="dash-stat-desc">Proyectos disponibles</span>
                 </div>
 
                 <div className="dash-stat-card">
@@ -353,8 +352,8 @@ function DashboardPage() {
                     <span className="dash-stat-label">API Keys</span>
                     <span className="dash-stat-icon dash-stat-icon--amber"><DashboardIcon name="key" /></span>
                   </div>
-                  <span className="dash-stat-number">{apiKeys.length >= 3 ? 38 : apiKeys.length}</span>
-                  <span className="dash-stat-desc">38 tokens autorizados</span>
+                  <span className="dash-stat-number">{apiKeys.length}</span>
+                  <span className="dash-stat-desc">Claves del proyecto activo</span>
                 </div>
 
                 <div className="dash-stat-card">
@@ -362,8 +361,8 @@ function DashboardPage() {
                     <span className="dash-stat-label">APIs Registradas</span>
                     <span className="dash-stat-icon dash-stat-icon--green"><DashboardIcon name="bolt" /></span>
                   </div>
-                  <span className="dash-stat-number">49</span>
-                  <span className="dash-stat-desc">Endpoints activos</span>
+                  <span className="dash-stat-number">{allApis.length}</span>
+                  <span className="dash-stat-desc">Endpoints del proyecto activo</span>
                 </div>
 
                 <div className="dash-stat-card">
@@ -371,7 +370,7 @@ function DashboardPage() {
                     <span className="dash-stat-label">Team Members</span>
                     <span className="dash-stat-icon dash-stat-icon--blue"><DashboardIcon name="users" /></span>
                   </div>
-                  <span className="dash-stat-number">4</span>
+                  <span className="dash-stat-number">{members.length}</span>
                   <span className="dash-stat-desc">Colaboradores activos</span>
                 </div>
               </div>
@@ -386,7 +385,7 @@ function DashboardPage() {
                   </div>
 
                   <div className="dash-activity-list">
-                    {INITIAL_ACTIVITIES.map((act) => (
+                    {INITIAL_ACTIVITIES.length === 0 ? <p>No hay actividad registrada todavía.</p> : INITIAL_ACTIVITIES.map((act) => (
                       <div key={act.id} className="dash-activity-item">
                         <img src={act.avatar} alt={act.user} className="dash-act-avatar" />
                         <div className="dash-act-content">
@@ -423,11 +422,11 @@ function DashboardPage() {
 
                   <div className="dash-quick-projects">
                     <h5>Proyectos destacados:</h5>
-                    {DEFAULT_PROJECTS.slice(0, 3).map((p) => (
+                    {projects.slice(0, 3).map((p) => (
                       <div key={p.id} className="dash-quick-proj-item">
                         <div className="dash-proj-info">
                           <span className="dash-proj-name">{p.name}</span>
-                          <span className="dash-proj-meta">{p.apis} APIs • {p.keys} Keys</span>
+                          <span className="dash-proj-meta">{p._count?.collections || 0} colecciones • {p._count?.apiKeys || 0} keys</span>
                         </div>
                         <button
                           type="button"
@@ -451,30 +450,30 @@ function DashboardPage() {
                 <div>
                   <h1 className="dash-pane-title">Proyectos del Workspace</h1>
                   <p className="dash-pane-subtitle">
-                    Gestiona los 12 proyectos asociados a tu espacio de trabajo.
+                    Gestiona los proyectos asociados a tu espacio de trabajo.
                   </p>
                 </div>
                 <button
                   type="button"
                   className="btn btn--primary btn--md"
-                  onClick={() => alert('Nuevo proyecto creado!')}
+                  onClick={() => setIsProjectModalOpen(true)}
                 >
                   + Nuevo Proyecto
                 </button>
               </div>
 
               <div className="dash-projects-grid">
-                {DEFAULT_PROJECTS.map((proj) => (
+                {projects.length === 0 ? <div className="dash-card-box"><p>No hay proyectos creados todavía.</p></div> : projects.map((proj) => (
                   <div key={proj.id} className="dash-project-card">
                     <div className="dash-project-header">
                       <h3 className="dash-proj-card-title">{proj.name}</h3>
-                      <span className="dash-status-pill">{proj.status}</span>
+                      <span className="dash-status-pill">{proj.status || 'ACTIVE'}</span>
                     </div>
                     <p className="dash-proj-card-desc">{proj.description}</p>
                     <div className="dash-proj-metrics">
-                      <span><DashboardIcon name="bolt" /> {proj.apis} Endpoints</span>
-                      <span><DashboardIcon name="key" /> {proj.keys} Keys</span>
-                      <span><DashboardIcon name="clock" /> {proj.updated}</span>
+                      <span><DashboardIcon name="bolt" /> {proj._count?.collections || 0} Colecciones</span>
+                      <span><DashboardIcon name="key" /> {proj._count?.apiKeys || 0} Keys</span>
+                      <span><DashboardIcon name="clock" /> {new Date(proj.updatedAt).toLocaleDateString()}</span>
                     </div>
                     <button
                       type="button"
@@ -486,6 +485,18 @@ function DashboardPage() {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {isProjectModalOpen && (
+            <div className="dash-modal-backdrop" role="presentation" onMouseDown={() => setIsProjectModalOpen(false)}>
+              <form className="dash-project-modal" onSubmit={handleCreateProject} onMouseDown={(event) => event.stopPropagation()}>
+                <h2>Nuevo proyecto</h2>
+                <label>Nombre<input autoFocus required value={projectForm.name} onChange={(event) => setProjectForm({ ...projectForm, name: event.target.value })} /></label>
+                <label>Descripción<textarea value={projectForm.description} onChange={(event) => setProjectForm({ ...projectForm, description: event.target.value })} /></label>
+                {projectError && <p className="dash-alert-error">{projectError}</p>}
+                <div className="dash-modal-actions"><button type="button" className="btn btn--secondary btn--sm" onClick={() => setIsProjectModalOpen(false)}>Cancelar</button><button type="submit" className="btn btn--primary btn--sm">Crear proyecto</button></div>
+              </form>
             </div>
           )}
 
@@ -520,43 +531,7 @@ function DashboardPage() {
                         <th>Acción</th>
                       </tr>
                     </thead>
-                    <tbody>
-                      <tr>
-                        <td><span className="dash-badge-get">GET</span></td>
-                        <td>Get Current User</td>
-                        <td><code>/api/v1/auth/me</code></td>
-                        <td>Auth</td>
-                        <td><button type="button" className="dash-link-btn" onClick={() => navigate('/app')}>Probar</button></td>
-                      </tr>
-                      <tr>
-                        <td><span className="dash-badge-post">POST</span></td>
-                        <td>User Login</td>
-                        <td><code>/api/v1/auth/login</code></td>
-                        <td>Auth</td>
-                        <td><button type="button" className="dash-link-btn" onClick={() => navigate('/app')}>Probar</button></td>
-                      </tr>
-                      <tr>
-                        <td><span className="dash-badge-get">GET</span></td>
-                        <td>List All Users</td>
-                        <td><code>/api/v1/admin/users</code></td>
-                        <td>Admin</td>
-                        <td><button type="button" className="dash-link-btn" onClick={() => navigate('/app')}>Probar</button></td>
-                      </tr>
-                      <tr>
-                        <td><span className="dash-badge-get">GET</span></td>
-                        <td>Trailers Feed</td>
-                        <td><code>/api/v1/trailers/feed</code></td>
-                        <td>Trailers</td>
-                        <td><button type="button" className="dash-link-btn" onClick={() => navigate('/app')}>Probar</button></td>
-                      </tr>
-                      <tr>
-                        <td><span className="dash-badge-post">POST</span></td>
-                        <td>Broadcast Notice</td>
-                        <td><code>/api/v1/notices/broadcast</code></td>
-                        <td>Notices</td>
-                        <td><button type="button" className="dash-link-btn" onClick={() => navigate('/app')}>Probar</button></td>
-                      </tr>
-                    </tbody>
+                    <tbody>{allApis.length === 0 ? <tr><td colSpan="5">No hay endpoints registrados todavía.</td></tr> : allApis.map((api) => <tr key={api.id}><td><span className={api.method === 'POST' ? 'dash-badge-post' : 'dash-badge-get'}>{api.method}</span></td><td>{api.name}</td><td><code>{api.path}</code></td><td>{api.collectionName}</td><td><button type="button" className="dash-link-btn" onClick={() => navigate('/app')}>Probar</button></td></tr>)}</tbody>
                   </table>
                 </div>
               </div>
@@ -575,37 +550,7 @@ function DashboardPage() {
                 </div>
               </div>
 
-              <div className="dash-env-grid">
-                <div className="dash-env-card">
-                  <div className="dash-env-header">
-                    <span className="dash-env-tag env-prod">Producción</span>
-                    <span className="dash-env-status">● Activo</span>
-                  </div>
-                  <h3>Production Gateway</h3>
-                  <p><code>https://api.apiwallet.io/v1</code></p>
-                  <span className="dash-env-vars">18 Variables de entorno</span>
-                </div>
-
-                <div className="dash-env-card">
-                  <div className="dash-env-header">
-                    <span className="dash-env-tag env-test">Staging</span>
-                    <span className="dash-env-status">● Activo</span>
-                  </div>
-                  <h3>Staging Cluster</h3>
-                  <p><code>https://staging-api.apiwallet.io/v1</code></p>
-                  <span className="dash-env-vars">14 Variables de entorno</span>
-                </div>
-
-                <div className="dash-env-card">
-                  <div className="dash-env-header">
-                    <span className="dash-env-tag env-dev">Local Dev</span>
-                    <span className="dash-env-status">● Localhost</span>
-                  </div>
-                  <h3>Localhost Sandbox</h3>
-                  <p><code>http://localhost:3000/api</code></p>
-                  <span className="dash-env-vars">8 Variables de entorno</span>
-                </div>
-              </div>
+              <div className="dash-env-grid">{environments.length === 0 ? <p>No hay entornos configurados para este proyecto.</p> : environments.map((environment) => <div className="dash-env-card" key={environment.id}><div className="dash-env-header"><span className={`dash-env-tag ${environment.isDefault ? 'env-prod' : 'env-test'}`}>{environment.name}</span><span className="dash-env-status">● Configurado</span></div><h3>{environment.name}</h3><p>{environment.baseUrl || 'Sin Base URL configurada.'}</p><span className="dash-env-vars">Gestiona sus secretos desde el Workspace</span></div>)}</div>
             </div>
           )}
 
@@ -621,29 +566,7 @@ function DashboardPage() {
                 </div>
               </div>
 
-              <div className="dash-card-box">
-                <div className="dash-secret-item">
-                  <div>
-                    <strong>JWT_PRIVATE_KEY</strong>
-                    <p>Llave asimétrica RSA-256 para firma de tokens</p>
-                  </div>
-                  <code>••••••••••••••••••••••••••••••••</code>
-                </div>
-                <div className="dash-secret-item">
-                  <div>
-                    <strong>STRIPE_WEBHOOK_SECRET</strong>
-                    <p>Firma de validación para eventos de pago</p>
-                  </div>
-                  <code>whsec_••••••••••••••••••••••••</code>
-                </div>
-                <div className="dash-secret-item">
-                  <div>
-                    <strong>DATABASE_ENCRYPTION_KEY</strong>
-                    <p>Llave AES para datos en reposo</p>
-                  </div>
-                  <code>aes_••••••••••••••••••••••••</code>
-                </div>
-              </div>
+              <div className="dash-card-box"><p>Los secretos se cifran y sus valores no se muestran. Adminístralos desde Entornos en el Workspace.</p><button type="button" className="btn btn--primary btn--sm" onClick={() => navigate('/app')}>Abrir Entornos</button></div>
             </div>
           )}
 
@@ -654,7 +577,7 @@ function DashboardPage() {
                 <div>
                   <h1 className="dash-pane-title">Equipo y Colaboradores</h1>
                   <p className="dash-pane-subtitle">
-                    4 miembros registrados con acceso al espacio de trabajo.
+                    {members.length} miembros registrados con acceso al espacio de trabajo.
                   </p>
                 </div>
                 <button
@@ -666,41 +589,20 @@ function DashboardPage() {
                 </button>
               </div>
 
-              {/* Shareable Project Code Banner */}
-              <div className="dash-share-code-card">
-                <div className="dash-share-code-info">
-                  <span className="dash-share-badge">Código de Invitación del Proyecto</span>
-                  <h3>Código para unirse al Workspace</h3>
-                  <p>Comparte este código con tus compañeros para que se unan al proyecto con 1 clic:</p>
-                </div>
-                <div className="dash-code-action-box">
-                  <code className="dash-code-display">PRJ-WALLET-7894-INV</code>
-                  <button
-                    type="button"
-                    className="dash-copy-code-btn"
-                    onClick={() => {
-                      navigator.clipboard.writeText('PRJ-WALLET-7894-INV');
-                      alert('¡Código PRJ-WALLET-7894-INV copiado al portapapeles!');
-                    }}
-                  >
-                    Copiar Código
-                  </button>
-                </div>
-              </div>
 
               {/* Members Table */}
               <div className="dash-card-box">
                 <div className="dash-members-list">
-                  {TEAM_MEMBERS.map((member) => (
+                  {members.length === 0 ? <p>No hay miembros registrados.</p> : members.map((member) => (
                     <div key={member.id} className="dash-member-row">
                       <div className="dash-member-identity">
-                        <img src={member.avatar} alt={member.name} className="dash-member-avatar" />
+                        {member.user.avatarUrl && <img src={member.user.avatarUrl} alt={member.user.name} className="dash-member-avatar" />}
                         <div>
-                          <strong>{member.name}</strong>
-                          <span>{member.email}</span>
+                          <strong>{member.user.name}</strong>
+                          <span>{member.user.email}</span>
                         </div>
                       </div>
-                      <span className={`dash-role-badge ${member.badgeClass}`}>
+                      <span className="dash-role-badge">
                         {member.role}
                       </span>
                     </div>
@@ -738,7 +640,7 @@ function DashboardPage() {
                     onChange={(e) => setInviteEmail(e.target.value)}
                     required
                   />
-                  <select defaultValue="developer">
+                  <select name="role" defaultValue="developer">
                     <option value="developer">Rol: Developer</option>
                     <option value="admin">Rol: Admin</option>
                     <option value="qa">Rol: QA Tester</option>
@@ -752,22 +654,12 @@ function DashboardPage() {
 
               <div className="dash-card-box">
                 <h3 className="dash-box-section-title">Invitaciones pendientes</h3>
-                <div className="dash-pending-invites">
-                  <div className="dash-pending-item">
-                    <div>
-                      <strong>laura@team.io</strong>
-                      <span>Invitado por Carlos T. • Rol: Developer</span>
-                    </div>
-                    <span className="dash-pending-badge">Pendiente</span>
-                  </div>
-                  <div className="dash-pending-item">
-                    <div>
-                      <strong>dev-externo@partner.io</strong>
-                      <span>Invitado por Alex Dev • Rol: Viewer</span>
-                    </div>
-                    <span className="dash-pending-badge">Pendiente</span>
-                  </div>
-                </div>
+                  <div className="dash-pending-invites">{invitations.length === 0 ? <p>No hay invitaciones pendientes.</p> : invitations.map((invitation) => <p key={invitation.id}>{invitation.email} · {invitation.role} · vence {new Date(invitation.expiresAt).toLocaleDateString()}</p>)}</div>
+              </div>
+
+              <div className="dash-card-box">
+                <h3 className="dash-box-section-title">Invitaciones recibidas</h3>
+                <div className="dash-pending-invites">{myInvitations.length === 0 ? <p>No tienes invitaciones recibidas.</p> : myInvitations.map((invitation) => <div className="dash-incoming-invite" key={invitation.id}><div><strong>{invitation.workspace.name}</strong><span>{invitation.role} · vence {new Date(invitation.expiresAt).toLocaleDateString()}</span></div><button type="button" className="btn btn--primary btn--sm" onClick={() => handleAcceptInvitation(invitation.id)}>Aceptar y unirme</button></div>)}</div>
               </div>
             </div>
           )}
@@ -780,11 +672,13 @@ function DashboardPage() {
         onClose={() => setIsSettingsOpen(false)}
         onConfirmDeleteApis={() => {
           setIsSettingsOpen(false);
-          alert('Acción de borrado disponible desde el Workspace.');
+          navigate('/app');
+          notify('Abre la sección de colecciones para confirmar la eliminación de endpoints.');
         }}
         onConfirmDeleteProject={() => {
           setIsSettingsOpen(false);
-          alert('Acción de reseteo disponible desde el Workspace.');
+          navigate('/app');
+          notify('Abre la configuración del Workspace para confirmar esta acción.');
         }}
       />
     </div>

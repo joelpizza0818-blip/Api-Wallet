@@ -1,20 +1,29 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useWorkspace } from '../workspaces/WorkspaceContext';
 import './FlowsView.css';
 
 function FlowsView({ onOpenNewFlowModal }) {
-  const { flows, toggleFlowStatus, deleteFlow, runFlowNow } = useWorkspace();
+  const { flows, activeProjectId, toggleFlowStatus, deleteFlow, runFlowNow } = useWorkspace();
   const [runningFlowId, setRunningFlowId] = useState(null);
+  const [executions, setExecutions] = useState([]);
+  const loadExecutions = async () => {
+    if (!activeProjectId) return;
+    const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/projects/${activeProjectId}/executions`, { credentials: 'include' });
+    if (response.ok) setExecutions((await response.json()).data || []);
+  };
 
-  const handleRunNow = (flowId) => {
+  useEffect(() => { loadExecutions().catch(() => {}); }, [activeProjectId, flows]);
+
+  const handleRunNow = async (flowId) => {
     setRunningFlowId(flowId);
-    setTimeout(() => {
-      runFlowNow(flowId);
-      setRunningFlowId(null);
-    }, 450);
+    try { await runFlowNow(flowId); await loadExecutions(); } finally { setRunningFlowId(null); }
   };
 
   const activeFlowsCount = flows.filter((f) => f.status === 'active').length;
+  const successfulExecutions = executions.filter((item) => item.statusCode >= 200 && item.statusCode < 400).length;
+  const uptime = executions.length ? `${Math.round((successfulExecutions / executions.length) * 100)}%` : 'Sin datos';
+  const averageLatency = executions.length ? `${Math.round(executions.reduce((total, item) => total + (item.latencyMs || 0), 0) / executions.length)} ms` : 'Sin datos';
+  const nextRun = useMemo(() => flows.filter((flow) => flow.status === 'active' && flow.lastRunAt).map((flow) => new Date(new Date(flow.lastRunAt).getTime() + flow.intervalMinutes * 60000)).sort((a, b) => a - b)[0], [flows]);
 
   return (
     <div className="wb-flows-view">
@@ -60,25 +69,25 @@ function FlowsView({ onOpenNewFlowModal }) {
         <div className="wb-flows-metric-card">
           <span className="wb-fl-label">Uptime del Sistema</span>
           <div className="wb-fl-metric-row">
-            <span className="wb-fl-number text-success">99.9%</span>
+            <span className="wb-fl-number text-success">{uptime}</span>
           </div>
-          <span className="wb-fl-sub">0 fallas críticas en 24h</span>
+          <span className="wb-fl-sub">{executions.length} ejecuciones registradas</span>
         </div>
 
         <div className="wb-flows-metric-card">
           <span className="wb-fl-label">Latencia Promedio</span>
           <div className="wb-fl-metric-row">
-            <span className="wb-fl-number">36 ms</span>
+            <span className="wb-fl-number">{averageLatency}</span>
           </div>
-          <span className="wb-fl-sub">Tráfico saludable</span>
+          <span className="wb-fl-sub">Basada en ejecuciones registradas</span>
         </div>
 
         <div className="wb-flows-metric-card">
           <span className="wb-fl-label">Próxima Ejecución</span>
           <div className="wb-fl-metric-row">
-            <span className="wb-fl-number text-accent">En 18m</span>
+            <span className="wb-fl-number text-accent">{nextRun ? nextRun.toLocaleString() : 'Sin programar'}</span>
           </div>
-          <span className="wb-fl-sub">Programación por hora</span>
+          <span className="wb-fl-sub">Próximo flow activo</span>
         </div>
       </div>
 
@@ -162,7 +171,18 @@ function FlowsView({ onOpenNewFlowModal }) {
 
                     <div className="wb-flow-target-meta">
                       <span className="wb-target-badge">
-                        {flow.targetType === 'group' ? '📁 Por Grupo:' : '⚡ Individual:'}
+                        <span className="wb-target-icon" aria-hidden="true">
+                          {flow.targetType === 'group' ? (
+                            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                            </svg>
+                          ) : (
+                            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="m13 2-9 12h7l-1 8 9-12h-7l1-8Z" />
+                            </svg>
+                          )}
+                        </span>
+                        {flow.targetType === 'group' ? 'Por Grupo:' : 'Individual:'}
                       </span>
                       <code className="wb-target-name">{flow.targetName}</code>
                     </div>
@@ -187,7 +207,7 @@ function FlowsView({ onOpenNewFlowModal }) {
 
                     <div className="wb-telem-col">
                       <span className="wb-telem-label">Tasa de Éxito</span>
-                      <span className="wb-telem-val text-success">{flow.successRate}</span>
+                      <span className="wb-telem-val text-success">{flow.runsCount ? (flow.lastStatusCode >= 200 && flow.lastStatusCode < 400 ? '100%' : '0%') : 'Sin datos'}</span>
                     </div>
 
                     <div className="wb-telem-col">
@@ -221,40 +241,7 @@ function FlowsView({ onOpenNewFlowModal }) {
                 <th>Resultado</th>
               </tr>
             </thead>
-            <tbody>
-              <tr>
-                <td>17:58:12</td>
-                <td>Auth Health Monitor</td>
-                <td><code>Auth Collection</code></td>
-                <td><span className="wb-code-200">200 OK</span></td>
-                <td>34 ms</td>
-                <td><span className="wb-check-green">✓ Passed</span></td>
-              </tr>
-              <tr>
-                <td>17:45:00</td>
-                <td>Trailers Feed CDN Check</td>
-                <td><code>GET /trailers/feed</code></td>
-                <td><span className="wb-code-200">200 OK</span></td>
-                <td>48 ms</td>
-                <td><span className="wb-check-green">✓ Passed</span></td>
-              </tr>
-              <tr>
-                <td>17:30:00</td>
-                <td>Auth Health Monitor</td>
-                <td><code>POST /auth/login</code></td>
-                <td><span className="wb-code-200">200 OK</span></td>
-                <td>29 ms</td>
-                <td><span className="wb-check-green">✓ Passed</span></td>
-              </tr>
-              <tr>
-                <td>17:00:00</td>
-                <td>Misc Ping Heartbeat</td>
-                <td><code>GET /misc/data</code></td>
-                <td><span className="wb-code-200">200 OK</span></td>
-                <td>18 ms</td>
-                <td><span className="wb-check-green">✓ Passed</span></td>
-              </tr>
-            </tbody>
+            <tbody>{executions.length === 0 ? <tr><td colSpan="6">Aún no hay ejecuciones registradas.</td></tr> : executions.slice(0, 20).map((entry) => { const successful = Number(entry.statusCode) >= 200 && Number(entry.statusCode) < 400; return <tr key={entry.id}><td>{new Date(entry.executedAt).toLocaleString()}</td><td>{entry.flow?.name || 'Manual'}</td><td><code>{entry.request?.method || '—'} {entry.request?.path || 'Destino no disponible'}</code></td><td><span className={successful ? 'wb-code-200' : ''}>{entry.statusCode || 'BLOCKED'}</span></td><td>{entry.latencyMs ?? '—'} ms</td><td><span className={successful ? 'wb-check-green' : ''}>{successful ? '✓ Correcta' : (entry.errorMessage || 'Fallida')}</span></td></tr>; })}</tbody>
           </table>
         </div>
       </div>

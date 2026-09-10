@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import logo from '../../assets/logo.svg';
 import UserProfileBubble from '../../components/common/UserProfileBubble/UserProfileBubble';
 import { useWorkspace } from './WorkspaceContext';
 import './TopBar.css';
 
 function TopBar({ onToggleSettings, isSettingsOpen, onOpenNewWorkspaceModal }) {
+  const navigate = useNavigate();
   const { workspaceName, workspaces, activeWorkspaceId, switchWorkspace } = useWorkspace();
   const [isWsMenuOpen, setIsWsMenuOpen] = useState(false);
   const [wsSearch, setWsSearch] = useState('');
@@ -31,12 +32,12 @@ function TopBar({ onToggleSettings, isSettingsOpen, onOpenNewWorkspaceModal }) {
       <div className="wb-topbar__left">
         {/* Navigation history controls */}
         <div className="wb-nav-controls">
-          <button type="button" className="wb-icon-btn" title="Atrás" disabled>
+          <button type="button" className="wb-icon-btn" title="Volver al dashboard" onClick={() => navigate('/dashboard')}>
             <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2">
               <polyline points="15 18 9 12 15 6" />
             </svg>
           </button>
-          <button type="button" className="wb-icon-btn" title="Adelante" disabled>
+          <button type="button" className="wb-icon-btn" title="Avanzar" onClick={() => window.history.forward()}>
             <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2">
               <polyline points="9 18 15 12 9 6" />
             </svg>

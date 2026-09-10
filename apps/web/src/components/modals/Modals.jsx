@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useWorkspace } from '../../features/workspaces/WorkspaceContext';
+import { useFeedback } from '../common/Feedback/FeedbackContext';
 import './Modals.css';
 
-export function NewApiModal({ isOpen, onClose, onApiCreated }) {
+export function NewApiModal({ isOpen, onClose, onApiCreated, initialCollectionId }) {
   const { collections, addApi } = useWorkspace();
   const [name, setName] = useState('');
   const [collectionId, setCollectionId] = useState(collections[0]?.id || 'col-auth');
@@ -10,12 +11,17 @@ export function NewApiModal({ isOpen, onClose, onApiCreated }) {
   const [path, setPath] = useState('/api/v1/');
   const [description, setDescription] = useState('');
 
+  useEffect(() => {
+    if (initialCollectionId) setCollectionId(initialCollectionId);
+    else if (collections[0]) setCollectionId(collections[0].id);
+  }, [initialCollectionId, collections]);
+
   if (!isOpen) return null;
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!name.trim()) return;
-    const createdApi = addApi(collectionId, {
+    if (!name.trim() || !collectionId || !collections.some((collection) => collection.id === collectionId)) return;
+    const createdApi = await addApi(collectionId, {
       name,
       method,
       path,
@@ -92,7 +98,7 @@ export function NewApiModal({ isOpen, onClose, onApiCreated }) {
             <button type="button" className="btn btn--secondary btn--sm" onClick={onClose}>
               Cancelar
             </button>
-            <button type="submit" className="btn btn--primary btn--sm">
+            <button type="submit" className="btn btn--primary btn--sm" disabled={!collections.length}>
               Crear Endpoint
             </button>
           </div>
@@ -102,19 +108,124 @@ export function NewApiModal({ isOpen, onClose, onApiCreated }) {
   );
 }
 
+export function NewCollectionModal({ isOpen, onClose }) {
+  const { collections, addCollection } = useWorkspace();
+  const { notify } = useFeedback();
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [parentId, setParentId] = useState('');
+
+  if (!isOpen) return null;
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    if (!name.trim()) return;
+    try {
+      await addCollection(name.trim(), description.trim(), parentId || null);
+      setName('');
+      setDescription('');
+      setParentId('');
+      notify('Carpeta creada.');
+      onClose();
+    } catch (error) { notify(error.message || 'No se pudo crear la carpeta.', 'error'); }
+  };
+
+  return (
+    <div className="wb-modal-overlay" onClick={onClose}>
+      <div className="wb-modal" onClick={(event) => event.stopPropagation()}>
+        <div className="wb-modal-header">
+          <div className="wb-header-with-icon">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+              <line x1="12" y1="10" x2="12" y2="16" />
+              <line x1="9" y1="13" x2="15" y2="13" />
+            </svg>
+            <h3>Nueva carpeta</h3>
+          </div>
+          <button type="button" className="wb-modal-close" onClick={onClose}>✕</button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="wb-modal-form">
+          <div className="wb-form-row">
+            <label>Nombre de la carpeta</label>
+            <input type="text" placeholder="p. ej. Pagos, Usuarios o Auth" value={name} onChange={(event) => setName(event.target.value)} required autoFocus />
+          </div>
+          <div className="wb-form-row">
+            <label>Descripción (opcional)</label>
+            <textarea placeholder="Qué requests agrupa esta carpeta" value={description} onChange={(event) => setDescription(event.target.value)} rows={2} />
+          </div>
+          <div className="wb-form-row">
+            <label>Carpeta padre (opcional)</label>
+            <select value={parentId} onChange={(event) => setParentId(event.target.value)}>
+              <option value="">En la raíz</option>
+              {collections.map((collection) => <option key={collection.id} value={collection.id}>{collection.name}</option>)}
+            </select>
+          </div>
+          <div className="wb-modal-actions">
+            <button type="button" className="btn btn--secondary btn--sm" onClick={onClose}>Cancelar</button>
+            <button type="submit" className="btn btn--primary btn--sm">Crear carpeta</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+export function EditResourceModal({ isOpen, item, kind, collections, onClose }) {
+  const { updateApi, updateCollection } = useWorkspace();
+  const { notify } = useFeedback();
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [parentId, setParentId] = useState('');
+
+  useEffect(() => {
+    if (!item) return;
+    setName(item.name || '');
+    setDescription(item.description || '');
+    setParentId(item.parentId || '');
+  }, [item]);
+
+  if (!isOpen || !item) return null;
+  const descendants = new Set();
+  const collectDescendants = (id) => collections.filter((collection) => collection.parentId === id).forEach((child) => { descendants.add(child.id); collectDescendants(child.id); });
+  if (kind === 'collection') collectDescendants(item.id);
+  const availableParents = collections.filter((collection) => collection.id !== item.id && !descendants.has(collection.id));
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    try {
+      if (kind === 'collection') await updateCollection(item.id, { name: name.trim(), description: description.trim(), parentId: parentId || null });
+      else await updateApi(item.id, { name: name.trim() });
+      notify(kind === 'collection' ? 'Carpeta actualizada.' : 'Request renombrada.');
+      onClose();
+    } catch (error) { notify(error.message || 'No se pudo guardar el cambio.', 'error'); }
+  };
+
+  return <div className="wb-modal-overlay" onClick={onClose}>
+    <div className="wb-modal" onClick={(event) => event.stopPropagation()}>
+      <div className="wb-modal-header"><div className="wb-header-with-icon"><h3>{kind === 'collection' ? 'Editar carpeta' : 'Renombrar request'}</h3></div><button type="button" className="wb-modal-close" onClick={onClose}>✕</button></div>
+      <form className="wb-modal-form" onSubmit={handleSubmit}>
+        <div className="wb-form-row"><label>{kind === 'collection' ? 'Nombre de la carpeta' : 'Nombre de la request'}</label><input required autoFocus value={name} onChange={(event) => setName(event.target.value)} /></div>
+        {kind === 'collection' && <><div className="wb-form-row"><label>Descripción</label><textarea rows={2} value={description} onChange={(event) => setDescription(event.target.value)} /></div><div className="wb-form-row"><label>Carpeta padre</label><select value={parentId} onChange={(event) => setParentId(event.target.value)}><option value="">En la raíz</option>{availableParents.map((collection) => <option key={collection.id} value={collection.id}>{collection.name}</option>)}</select></div></>}
+        <div className="wb-modal-actions"><button type="button" className="btn btn--secondary btn--sm" onClick={onClose}>Cancelar</button><button type="submit" className="btn btn--primary btn--sm">Guardar cambios</button></div>
+      </form>
+    </div>
+  </div>;
+}
+
 export function NewKeyModal({ isOpen, onClose }) {
   const { addApiKey } = useWorkspace();
+  const { notify } = useFeedback();
   const [name, setName] = useState('');
   const [environment, setEnvironment] = useState('Producción');
   const [scope, setScope] = useState('Full Access (Read/Write)');
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!name.trim()) return;
-    addApiKey({ name, environment, scope });
-    onClose();
+    try { await addApiKey({ name, environment, scope }); onClose(); notify('API Key generada.'); } catch (error) { notify(error.message || 'No se pudo generar la API Key.', 'error'); }
   };
 
   return (
@@ -181,8 +292,8 @@ export function ConfirmDeleteApisModal({ isOpen, onClose }) {
 
   if (!isOpen) return null;
 
-  const handleConfirm = () => {
-    deleteAllApis();
+  const handleConfirm = async () => {
+    await deleteAllApis();
     onClose();
   };
 
@@ -226,9 +337,9 @@ export function ConfirmDeleteProjectModal({ isOpen, onClose }) {
 
   if (!isOpen) return null;
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (confirmWord.trim().toUpperCase() === 'BORRAR') {
-      deleteProject();
+      await deleteProject();
       setConfirmWord('');
       onClose();
     }
@@ -285,20 +396,24 @@ export function ConfirmDeleteProjectModal({ isOpen, onClose }) {
 
 export function NewWorkspaceModal({ isOpen, onClose, onWorkspaceCreated }) {
   const { createWorkspace } = useWorkspace();
+  const { notify } = useFeedback();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [visibility, setVisibility] = useState('team');
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!name.trim()) return;
-    const newWs = createWorkspace({ name, description });
-    if (onWorkspaceCreated) onWorkspaceCreated(newWs);
-    setName('');
-    setDescription('');
-    onClose();
+    try {
+      const newWs = await createWorkspace({ name, description });
+      if (onWorkspaceCreated) onWorkspaceCreated(newWs);
+      setName('');
+      setDescription('');
+      onClose();
+      notify('Workspace creado.');
+    } catch (error) { notify(error.message || 'No se pudo crear el workspace.', 'error'); }
   };
 
   return (
@@ -362,9 +477,10 @@ export function NewWorkspaceModal({ isOpen, onClose, onWorkspaceCreated }) {
 
 export function NewFlowModal({ isOpen, onClose, onFlowCreated }) {
   const { collections, createFlow } = useWorkspace();
+  const { notify } = useFeedback();
   const [name, setName] = useState('');
   const [targetType, setTargetType] = useState('group'); // 'group' | 'individual'
-  const [selectedTarget, setSelectedTarget] = useState(collections[0]?.name || 'Auth Collection');
+  const [selectedTarget, setSelectedTarget] = useState(collections[0]?.id || '');
   const [frequency, setFrequency] = useState('Cada 1 hora');
   const [notifyOnError, setNotifyOnError] = useState(true);
 
@@ -372,10 +488,10 @@ export function NewFlowModal({ isOpen, onClose, onFlowCreated }) {
 
   // Flatten all APIs for individual selection
   const allApis = collections.flatMap((c) =>
-    c.apis.map((a) => ({ id: a.id, name: `${a.method} ${a.path} (${c.name})` }))
+    c.apis.map((a) => ({ id: a.id, label: `${a.method} ${a.path} (${c.name})` }))
   );
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!name.trim()) return;
 
@@ -384,18 +500,13 @@ export function NewFlowModal({ isOpen, onClose, onFlowCreated }) {
     else if (frequency === 'Cada 2 horas') intervalMinutes = 120;
     else if (frequency === 'Diario (24h)') intervalMinutes = 1440;
 
-    const newFlow = createFlow({
-      name,
-      targetType,
-      targetName: selectedTarget,
-      frequency,
-      intervalMinutes,
-      notifyOnError,
-    });
-
-    if (onFlowCreated) onFlowCreated(newFlow);
-    setName('');
-    onClose();
+    try {
+      const newFlow = await createFlow({ name, targetType, targetName: selectedTarget, frequency, intervalMinutes, notifyOnError });
+      if (onFlowCreated) onFlowCreated(newFlow);
+      setName('');
+      onClose();
+      notify('Flow programado.');
+    } catch (error) { notify(error.message || 'No se pudo programar el flow.', 'error'); }
   };
 
   return (
@@ -434,7 +545,7 @@ export function NewFlowModal({ isOpen, onClose, onFlowCreated }) {
                   checked={targetType === 'group'}
                   onChange={() => {
                     setTargetType('group');
-                    setSelectedTarget(`${collections[0]?.name || 'Auth'} Collection`);
+                    setSelectedTarget(collections[0]?.id || '');
                   }}
                 />
                 Por Grupo (Colección)
@@ -448,7 +559,7 @@ export function NewFlowModal({ isOpen, onClose, onFlowCreated }) {
                   checked={targetType === 'individual'}
                   onChange={() => {
                     setTargetType('individual');
-                    setSelectedTarget(allApis[0]?.name || 'GET /api/v1/auth/me');
+                    setSelectedTarget(allApis[0]?.id || '');
                   }}
                 />
                 Individual (1 Endpoint)
@@ -461,7 +572,7 @@ export function NewFlowModal({ isOpen, onClose, onFlowCreated }) {
             {targetType === 'group' ? (
               <select value={selectedTarget} onChange={(e) => setSelectedTarget(e.target.value)}>
                 {collections.map((c) => (
-                  <option key={c.id} value={`${c.name} Collection (${c.apis.length} APIs)`}>
+                  <option key={c.id} value={c.id}>
                     {c.name} ({c.apis.length} endpoints)
                   </option>
                 ))}
@@ -470,7 +581,7 @@ export function NewFlowModal({ isOpen, onClose, onFlowCreated }) {
               <select value={selectedTarget} onChange={(e) => setSelectedTarget(e.target.value)}>
                 {allApis.map((a) => (
                   <option key={a.id} value={a.name}>
-                    {a.name}
+                    {a.label}
                   </option>
                 ))}
               </select>

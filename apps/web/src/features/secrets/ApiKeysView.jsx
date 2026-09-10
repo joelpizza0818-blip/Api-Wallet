@@ -3,7 +3,7 @@ import { useWorkspace } from '../workspaces/WorkspaceContext';
 import './ApiKeysView.css';
 
 function ApiKeysView({ onOpenNewKeyModal }) {
-  const { apiKeys, deleteApiKey } = useWorkspace();
+  const { apiKeys, environments, deleteApiKey } = useWorkspace();
   const [revealedKeys, setRevealedKeys] = useState({});
   const [copiedKeyId, setCopiedKeyId] = useState(null);
 
@@ -15,6 +15,7 @@ function ApiKeysView({ onOpenNewKeyModal }) {
   };
 
   const handleCopy = (id, keyText) => {
+    if (!keyText) return;
     navigator.clipboard.writeText(keyText);
     setCopiedKeyId(id);
     setTimeout(() => setCopiedKeyId(null), 2000);
@@ -61,14 +62,14 @@ function ApiKeysView({ onOpenNewKeyModal }) {
 
         <div className="wb-metric-card">
           <span className="wb-metric-label">Entornos</span>
-          <span className="wb-metric-value">2</span>
-          <span className="wb-metric-sub">Producción y Staging / Dev</span>
+          <span className="wb-metric-value">{environments.length}</span>
+          <span className="wb-metric-sub">Configurados en este proyecto</span>
         </div>
 
         <div className="wb-metric-card">
           <span className="wb-metric-label">Seguridad</span>
-          <span className="wb-metric-value text-success">100%</span>
-          <span className="wb-metric-sub">Encriptación AES-256</span>
+          <span className="wb-metric-value text-success">{apiKeys.filter((key) => key.status === 'ACTIVE').length}</span>
+          <span className="wb-metric-sub">Claves activas</span>
         </div>
       </div>
 
@@ -105,15 +106,15 @@ function ApiKeysView({ onOpenNewKeyModal }) {
                   <div className="wb-key-card-left">
                     <div className="wb-key-meta">
                       <span className="wb-key-title">{keyItem.name}</span>
-                      <span className={`wb-key-env ${keyItem.environment === 'Producción' ? 'wb-env-prod' : 'wb-env-dev'}`}>
-                        {keyItem.environment}
+                      <span className={`wb-key-env ${keyItem.prefix === 'sk_live' ? 'wb-env-prod' : 'wb-env-dev'}`}>
+                        {keyItem.prefix === 'sk_live' ? 'Producción' : 'Staging / Dev'}
                       </span>
-                      <span className="wb-key-scope-badge">{keyItem.scope}</span>
+                      <span className="wb-key-scope-badge">{(keyItem.scopes || []).join(', ') || 'Sin scopes'}</span>
                     </div>
 
                     <div className="wb-key-token-box">
                       <code className="wb-key-token">
-                        {formatKeyDisplay(keyItem.key, isRevealed)}
+                        {keyItem.key ? formatKeyDisplay(keyItem.key, isRevealed) : `${keyItem.prefix}_••••${keyItem.lastFourCharacters}`}
                       </code>
 
                       <button
@@ -138,21 +139,21 @@ function ApiKeysView({ onOpenNewKeyModal }) {
                       <button
                         type="button"
                         className={`wb-key-copy-btn ${isCopied ? 'wb-key-copy-btn--copied' : ''}`}
-                        onClick={() => handleCopy(keyItem.id, keyItem.key)}
+                        onClick={() => handleCopy(keyItem.id, keyItem.key)} disabled={!keyItem.key}
                         title="Copiar API Key al portapapeles"
                       >
                         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2">
                           <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
                           <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                         </svg>
-                        <span>{isCopied ? '¡Copiado!' : 'Copiar'}</span>
+                        <span>{isCopied ? '¡Copiado!' : keyItem.key ? 'Copiar' : 'No disponible'}</span>
                       </button>
                     </div>
 
                     <div className="wb-key-timestamps">
-                      <span>Creada: {keyItem.created}</span>
+                      <span>Creada: {new Date(keyItem.createdAt).toLocaleDateString()}</span>
                       <span>•</span>
-                      <span>Último uso: {keyItem.lastUsed}</span>
+                      <span>Último uso: {keyItem.lastUsedAt ? new Date(keyItem.lastUsedAt).toLocaleString() : 'Aún no usada'}</span>
                     </div>
                   </div>
 
