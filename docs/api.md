@@ -10,6 +10,8 @@
 
 ## Autenticacion
 
+Para el despliegue con Vercel y Render, configura `FRONTEND_URL` en Render con `https://api-wallet-phi.vercel.app` y `VITE_API_URL` en Vercel con la URL publica del backend de Render. Google debe usar como callback `${VITE_API_URL}/api/auth/google/callback`. El callback crea la cookie `api_vault_token` y redirige a `/auth/callback` en el frontend, que valida la sesion con `/api/auth/me`.
+
 | Metodo | Ruta | Descripcion |
 |---|---|---|
 | `POST` | `/api/auth/register` | Registra usuario local y crea sesion |

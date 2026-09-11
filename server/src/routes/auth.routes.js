@@ -9,6 +9,21 @@ const { authRateLimit } = require('../middleware/rate-limit.middleware');
 const prisma = require('../config/database');
 
 const router = express.Router();
+const frontendUrl = () => (process.env.FRONTEND_URL || '').replace(/\/+$/, '');
+const oauthCookieOptions = {
+  httpOnly: true,
+  sameSite: 'lax',
+  secure: process.env.NODE_ENV === 'production',
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+  path: '/',
+};
+
+function redirectWithSession(req, res) {
+  const token = createToken(req.user);
+  res.cookie('api_vault_token', token, oauthCookieOptions);
+  return res.redirect(`${frontendUrl()}/auth/callback`);
+}
+
 router.post('/register', authRateLimit, register);
 router.post('/login', authRateLimit, login);
 
@@ -41,7 +56,7 @@ router.get('/github/status', (_req, res) => {
 
 function oauthFailureRedirect(provider) {
   if (provider === 'google' && hasGithubConfiguration()) return '/api/auth/github';
-  return `${process.env.FRONTEND_URL}/register?error=${provider}_auth_failed`;
+  return `${frontendUrl()}/register?error=${provider}_auth_failed`;
 }
 
 if (hasGoogleConfiguration()) {
@@ -54,11 +69,7 @@ if (hasGoogleConfiguration()) {
   }));
 
   router.get('/google', passport.authenticate('google', { scope: ['openid', 'profile', 'email'], state: true, session: false }));
-  router.get('/google/callback', passport.authenticate('google', { session: false, failureRedirect: oauthFailureRedirect('google') }), (req, res) => {
-    const token = createToken(req.user);
-    res.cookie('api_vault_token', token, { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', maxAge: 7 * 24 * 60 * 60 * 1000, path: '/' });
-    res.redirect(`${process.env.FRONTEND_URL}/auth/callback`);
-  });
+  router.get('/google/callback', passport.authenticate('google', { session: false, failureRedirect: oauthFailureRedirect('google') }), redirectWithSession);
 } else {
   router.get('/google', (_req, res) => res.status(503).json({ success: false, message: 'Google OAuth requires valid Google Cloud credentials.' }));
 }
@@ -74,11 +85,7 @@ if (hasGithubConfiguration()) {
   }));
 
   router.get('/github', passport.authenticate('github', { scope: ['user:email'], session: false }));
-  router.get('/github/callback', passport.authenticate('github', { session: false, failureRedirect: oauthFailureRedirect('github') }), (req, res) => {
-    const token = createToken(req.user);
-    res.cookie('api_vault_token', token, { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', maxAge: 7 * 24 * 60 * 60 * 1000, path: '/' });
-    res.redirect(`${process.env.FRONTEND_URL}/auth/callback`);
-  });
+  router.get('/github/callback', passport.authenticate('github', { session: false, failureRedirect: oauthFailureRedirect('github') }), redirectWithSession);
 } else {
   router.get('/github', (_req, res) => res.status(503).json({ success: false, message: 'GitHub OAuth requires GitHub OAuth App credentials.' }));
 }
