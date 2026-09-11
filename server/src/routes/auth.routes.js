@@ -20,10 +20,10 @@ const oauthCookieOptions = {
   path: '/',
 };
 
-function redirectWithSession(req, res) {
+function redirectWithSession(req, res, destination = '/auth/callback') {
   const token = createToken(req.user);
   res.cookie('api_vault_token', token, oauthCookieOptions);
-  return res.redirect(`${frontendUrl()}/auth/callback`);
+  return res.redirect(`${frontendUrl()}${destination}`);
 }
 
 router.post('/register', authRateLimit, register);
@@ -87,7 +87,7 @@ if (hasGithubConfiguration()) {
   }));
 
   router.get('/github', passport.authenticate('github', { scope: ['user:email'], session: false }));
-  router.get('/github/callback', passport.authenticate('github', { session: false, failureRedirect: oauthFailureRedirect('github') }), redirectWithSession);
+  router.get('/github/callback', passport.authenticate('github', { session: false, failureRedirect: oauthFailureRedirect('github') }), (req, res) => redirectWithSession(req, res, '/'));
 } else {
   router.get('/github', (_req, res) => res.status(503).json({ success: false, message: 'GitHub OAuth requires GitHub OAuth App credentials.' }));
 }
