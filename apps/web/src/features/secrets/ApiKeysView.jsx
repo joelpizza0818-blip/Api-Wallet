@@ -16,28 +16,31 @@ function ApiKeysView({ onOpenNewKeyModal }) {
     }));
   };
 
-  const handleCopy = (id, keyText) => {
+  const handleCopy = async (id, keyText) => {
     if (!keyText) return;
-    navigator.clipboard.writeText(keyText);
-    setCopiedKeyId(id);
-    setTimeout(() => setCopiedKeyId(null), 2000);
+    try {
+      await navigator.clipboard.writeText(keyText);
+      setCopiedKeyId(id);
+      setTimeout(() => setCopiedKeyId(null), 2000);
+    } catch {
+      notify('No se pudo copiar la API Key al portapapeles.', 'error');
+    }
   };
 
-  const handleRevoke = (keyId, keyName) => {
-    confirm({
+  const handleRevoke = async (keyId, keyName) => {
+    const accepted = await confirm({
       title: 'Revocar API Key',
       message: `¿Estás seguro de que deseas revocar "${keyName}"? Esta clave dejará de funcionar inmediatamente.`,
-      confirmText: 'Sí, revocar clave',
-      cancelText: 'Cancelar',
-      onConfirm: async () => {
-        try {
-          await deleteApiKey(keyId);
-          notify('API Key revocada exitosamente.');
-        } catch (error) {
-          notify(error.message || 'No se pudo revocar la API Key.', 'error');
-        }
-      },
+      confirmLabel: 'Sí, revocar clave',
     });
+    if (!accepted) return;
+
+    try {
+      await deleteApiKey(keyId);
+      notify('API Key revocada exitosamente.');
+    } catch (error) {
+      notify(error.message || 'No se pudo revocar la API Key.', 'error');
+    }
   };
 
   const formatKeyDisplay = (keyText, isRevealed) => {
@@ -46,7 +49,7 @@ function ApiKeysView({ onOpenNewKeyModal }) {
     return `${prefix}••••••••••••••••••••••••`;
   };
 
-  const activeKeys = apiKeys.filter((key) => key.status !== 'REVOKED');
+  const activeKeys = apiKeys.filter((key) => key.status !== 'REVOKED' && !key.revokedAt);
 
   return (
     <div className="wb-keys-view">
@@ -168,9 +171,10 @@ function ApiKeysView({ onOpenNewKeyModal }) {
                       >
                         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2">
                           <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+
                           <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                         </svg>
-                        <span>{isCopied ? '¡Copiado!' : keyItem.key ? 'Copiar' : 'No disponible'}</span>
+                        <span>{isCopied ? '¡Copiado!' : keyItem.key ? 'Copiar' : 'Copiar '}</span>
                       </button>
                     </div>
 

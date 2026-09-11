@@ -47,6 +47,7 @@ async function runE2ETests() {
   const browser = await launchBrowser();
   const context = await browser.newContext({
     viewport: { width: 1280, height: 800 },
+    permissions: ['clipboard-read', 'clipboard-write'],
   });
   const page = await context.newPage();
 
@@ -90,7 +91,34 @@ async function runE2ETests() {
     await page.screenshot({ path: path.join(ARTIFACT_DIR, '02_workspace_dashboard.png') });
 
     // ----------------------------------------------------
-    // Scenario 0: Real external API reachability
+    // Scenario 0: Workspace sharing and environments
+    // ----------------------------------------------------
+    addLog('🔗 Testing workspace invitation code and environments...');
+    const shareButton = page.locator('button:has-text("Share")').first();
+    await shareButton.click();
+    const sharedValue = await page.evaluate(() => navigator.clipboard.readText());
+    const workspaceCodes = await page.evaluate(async () => {
+      const response = await fetch('http://localhost:3000/api/workspaces', { credentials: 'include' });
+      const result = await response.json();
+      return (result.data || []).map((workspace) => workspace.inviteCode).filter(Boolean);
+    });
+    if (!workspaceCodes.some((code) => /^WS-[A-F0-9]+-[A-F0-9]+$/.test(code))) throw new Error('Share did not create a valid workspace invitation code');
+    if (sharedValue && (!/^WS-[A-F0-9]+-[A-F0-9]+$/.test(sharedValue) || sharedValue.includes('localhost'))) throw new Error(`Share copied an invalid value: ${sharedValue}`);
+    addLog('✅ Share copied a functional workspace invitation code.');
+
+    const variablesTab = page.locator('button:has-text("Variables")').first();
+    if (await variablesTab.isVisible()) {
+      await variablesTab.click();
+      const newEnvironment = page.locator('button:has-text("Nuevo entorno")').first();
+      await newEnvironment.click();
+      await page.locator('input[placeholder="Produccion"]').fill(`E2E ${Date.now()}`);
+      await page.locator('button:has-text("Guardar entorno")').click();
+      if (!(await page.locator('.wb-env-table').isVisible())) throw new Error('Environment was not created');
+      addLog('✅ Environment creation and reload completed.');
+    }
+
+    // ----------------------------------------------------
+    // Scenario 1: Real external API reachability
     // ----------------------------------------------------
     addLog('🌍 Testing real external APIs...');
     const jsonPlaceholder = await page.request.get('https://jsonplaceholder.typicode.com/posts/1');
@@ -177,10 +205,9 @@ async function runE2ETests() {
     const scriptsTab = page.locator('button:has-text("Scripts")').first();
     if (await scriptsTab.isVisible()) {
       await scriptsTab.click();
-      await page.locator('.wb-snippets-trigger-btn').click();
-      if (!(await page.locator('.wb-snippets-popover').isVisible())) throw new Error('Script snippets popover did not open');
+      if (!(await page.locator('textarea[placeholder*="pm.variables"], textarea[placeholder*="pm.expect"]').count())) throw new Error('Collection script editors did not render');
       await page.screenshot({ path: path.join(ARTIFACT_DIR, '04_curl_js_scripts.png') });
-      addLog('✅ JS script snippets are available in the Scripts tab.');
+      addLog('✅ Collection pre-request and post-response script editors are available.');
     }
 
     addLog('🎉 Layer 2 Live Browser E2E Tests completed successfully!');

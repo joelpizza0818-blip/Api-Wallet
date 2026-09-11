@@ -12,7 +12,7 @@
     "prisma:generate": "prisma generate --schema ../prisma/schema.prisma",
     "prisma:migrate": "prisma migrate dev --schema ../prisma/schema.prisma",
     "seed": "node ../prisma/seed.js",
-    "test": "node --test tests/*.test.js"
+    "test": "node --test tests/**/*.test.js tests/*.test.js"
   },
   "keywords": [],
   "author": "",

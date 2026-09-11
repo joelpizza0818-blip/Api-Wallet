@@ -7,7 +7,7 @@ import FlowsView from '../requests/FlowsView';
 import './WorkspaceOverview.css';
 
 function WorkspaceOverview({ onNavigateApis, onNavigateDocs, onNavigateFlows, onNavigateKeys, onOpenSettings, onOpenNewFlowModal }) {
-  const { collections, apiKeys, workspaceName, updateCollection, addApiKey } = useWorkspace();
+  const { collections, apiKeys, workspaceName, workspaceDetails, updateCollection, addApiKey, regenerateInviteCode } = useWorkspace();
   const { user } = useAuth();
   const { notify } = useFeedback();
   const [activeTab, setActiveTab] = useState('overview');
@@ -16,6 +16,16 @@ function WorkspaceOverview({ onNavigateApis, onNavigateDocs, onNavigateFlows, on
   const [preRequestScript, setPreRequestScript] = useState(collection?.preRequestScript || '');
   const [testScript, setTestScript] = useState(collection?.testScript || '');
   const [saved, setSaved] = useState(false);
+
+  const handleShare = async () => {
+    try {
+      const inviteCode = workspaceDetails?.inviteCode || await regenerateInviteCode();
+      await navigator.clipboard.writeText(inviteCode);
+      notify('Código de invitación copiado al portapapeles.');
+    } catch (error) {
+      notify(error.message || 'No se pudo copiar el código de invitación.', 'error');
+    }
+  };
 
   useEffect(() => {
     setAuthorization({ type: 'none', ...(collection?.authorization || {}) });
@@ -55,7 +65,7 @@ function WorkspaceOverview({ onNavigateApis, onNavigateDocs, onNavigateFlows, on
             Run
           </button>
 
-          <button type="button" className="wb-ov-btn wb-ov-btn--primary" onClick={async () => { await navigator.clipboard?.writeText(window.location.origin); notify('Enlace del workspace copiado al portapapeles.'); }}>
+          <button type="button" className="wb-ov-btn wb-ov-btn--primary" onClick={handleShare}>
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="18" cy="5" r="3" />
               <circle cx="6" cy="12" r="3" />

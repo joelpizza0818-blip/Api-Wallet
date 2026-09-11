@@ -226,6 +226,14 @@ export function WorkspaceProvider({ children }) {
     if (!response.ok) throw new Error('No se pudo revocar la API key');
     setApiKeys((items) => items.filter((item) => item.id !== keyId));
   };
+  const regenerateInviteCode = async () => {
+    if (!activeWorkspaceId) throw new Error('Selecciona un workspace primero');
+    const response = await fetch(`${API_URL}/api/workspaces/${activeWorkspaceId}`, { method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ regenerateInviteCode: true }) });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.message || 'No se pudo generar el código de invitación');
+    setWorkspaceDetails(result.data);
+    return result.data.inviteCode;
+  };
   const createWorkspace = async ({ name, description }) => {
     const response = await fetch(`${API_URL}/api/workspaces`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, description }) });
     const result = await response.json();
@@ -283,7 +291,7 @@ export function WorkspaceProvider({ children }) {
       projects, activeWorkspaceId, activeProjectId, createWorkspace, createProject, switchWorkspace, flows, environments, workspaceDetails, createFlow,
       toggleFlowStatus, deleteFlow, runFlowNow, addApi, createBlankRequest, deleteApi,
       addCollection, updateApi, updateCollection, deleteCollection, deleteAllApis, deleteProject,
-      restoreDefaultWorkspace, addApiKey, deleteApiKey, consoleLogs, addConsoleLog, clearConsoleLogs,
+      restoreDefaultWorkspace, addApiKey, deleteApiKey, regenerateInviteCode, consoleLogs, addConsoleLog, clearConsoleLogs,
     }}>
       {children}
     </WorkspaceContext.Provider>

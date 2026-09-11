@@ -138,7 +138,7 @@ async function getProject(req, res) {
         collections: { include: { requests: true }, orderBy: { sortOrder: 'asc' } },
         environments: true,
         apiKeys: {
-          where: { status: { not: 'REVOKED' } },
+          where: { status: { not: 'REVOKED' }, revokedAt: null },
           select: {
             id: true,
             name: true,
@@ -148,6 +148,7 @@ async function getProject(req, res) {
             status: true,
             createdAt: true,
             lastUsedAt: true,
+            revokedAt: true,
           },
         },
       },

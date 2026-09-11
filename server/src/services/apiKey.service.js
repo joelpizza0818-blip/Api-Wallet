@@ -56,6 +56,7 @@ async function getApiKeys(projectId, includeRevoked = false) {
   const where = { projectId };
   if (!includeRevoked) {
     where.status = { not: 'REVOKED' };
+    where.revokedAt = null;
   }
 
   const keys = await prisma.apiKey.findMany({
