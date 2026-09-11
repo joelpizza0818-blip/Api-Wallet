@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { LogoIcon } from '../../components/common/Logo/Logo';
 import Card from '../../components/ui/Card';
@@ -102,15 +103,24 @@ const FEATURES = [
 ];
 
 const GUIDE_SHOTS = [
-  { title: 'Dashboard', description: 'Estadísticas y actividad del workspace.', image: '/guide/02-dashboard.png' },
-  { title: 'Invitaciones', description: 'Invita colaboradores y gestiona roles.', image: '/guide/03-invitations.png' },
-  { title: 'Configuración', description: 'Ajusta preferencias y seguridad.', image: '/guide/03-settings.png' },
-  { title: 'Workspace', description: 'Organiza colecciones, requests y entornos.', image: '/guide/03-workspace.png' },
-  { title: 'API Keys', description: 'Administra credenciales del proyecto.', image: '/guide/03-apikeys.png' },
+  { title: 'Dashboard', description: 'Estadísticas y actividad del workspace.', image: '/guide/02-dashboard.png', steps: ['Revisa Projects, API Keys, APIs registradas y miembros.', 'Consulta la actividad reciente del workspace.', 'Abre el Workspace para ejecutar y organizar requests.'] },
+  { title: 'Invitaciones', description: 'Invita colaboradores y gestiona roles.', image: '/guide/03-invitations.png', steps: ['Escribe el correo del colaborador.', 'Selecciona Developer, Admin, QA o Viewer.', 'Pulsa Enviar Invitación y revisa el estado pendiente.'] },
+  { title: 'Configuración', description: 'Ajusta preferencias y seguridad.', image: '/guide/03-settings.png', steps: ['Abre Workspace, Teamwork o Perfil.', 'Personaliza colores y preferencias del espacio.', 'Usa las acciones de seguridad con cuidado porque pueden ser irreversibles.'] },
+  { title: 'Workspace', description: 'Organiza colecciones, requests y entornos.', image: '/guide/03-workspace.png', steps: ['Selecciona un proyecto desde la barra lateral.', 'Abre una colección para ver sus endpoints.', 'Ejecuta una request, revisa la respuesta y guarda los cambios.'] },
+  { title: 'API Keys', description: 'Administra credenciales del proyecto.', image: '/guide/03-apikeys.png', steps: ['Consulta el contador de API Keys del proyecto.', 'Crea o revoca credenciales desde la sección Keys.', 'Asigna una key guardada desde Authorization en una request.'] },
 ];
 
 function LandingPage() {
   const { isAuthenticated, logout } = useAuth();
+  const [selectedGuide, setSelectedGuide] = useState(null);
+
+  useEffect(() => {
+    if (!selectedGuide) return undefined;
+    const closeOnEscape = (event) => { if (event.key === 'Escape') setSelectedGuide(null); };
+    document.addEventListener('keydown', closeOnEscape);
+    document.body.style.overflow = 'hidden';
+    return () => { document.removeEventListener('keydown', closeOnEscape); document.body.style.overflow = ''; };
+  }, [selectedGuide]);
 
   return (
     <div className="landing">
@@ -204,14 +214,24 @@ function LandingPage() {
           <p className="landing__section-subtitle">Una guía visual rápida de las áreas principales de API-Wallet.</p>
           <div className="landing__guide-grid">
             {GUIDE_SHOTS.map((shot) => (
-              <article className="landing__guide-card" key={shot.title}>
+              <article className="landing__guide-card" key={shot.title} role="button" tabIndex={0} onClick={() => setSelectedGuide(shot)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') setSelectedGuide(shot); }}>
                 <div className="landing__guide-image-wrap"><img src={shot.image} alt={`Vista de ${shot.title}`} loading="lazy" /></div>
-                <div className="landing__guide-copy"><h3>{shot.title}</h3><p>{shot.description}</p></div>
+                <div className="landing__guide-copy"><h3>{shot.title}</h3><p>{shot.description}</p><span className="landing__guide-link">Abrir guía →</span></div>
               </article>
             ))}
           </div>
         </div>
       </section>
+
+      {selectedGuide && (
+        <div className="landing__guide-modal" role="presentation" onClick={() => setSelectedGuide(null)}>
+          <div className="landing__guide-modal-card" role="dialog" aria-modal="true" aria-labelledby="guide-title" onClick={(event) => event.stopPropagation()}>
+            <button type="button" className="landing__guide-modal-close" aria-label="Cerrar guía" onClick={() => setSelectedGuide(null)}>×</button>
+            <div className="landing__guide-modal-image"><img src={selectedGuide.image} alt={`Captura ampliada de ${selectedGuide.title}`} /></div>
+            <div className="landing__guide-modal-content"><span className="landing__hero-badge">Guía rápida</span><h2 id="guide-title">{selectedGuide.title}</h2><p>{selectedGuide.description}</p><ol>{selectedGuide.steps.map((step) => <li key={step}>{step}</li>)}</ol><Link className="btn btn--primary" to={isAuthenticated ? '/app' : '/login'} onClick={() => setSelectedGuide(null)}>Probarlo en API-Wallet →</Link></div>
+          </div>
+        </div>
+      )}
 
       <section className="landing__cta">
         <div className="container landing__cta-inner">
