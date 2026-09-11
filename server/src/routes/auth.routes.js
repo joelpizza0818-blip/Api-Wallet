@@ -12,7 +12,9 @@ const router = express.Router();
 const frontendUrl = () => (process.env.FRONTEND_URL || '').replace(/\/+$/, '');
 const oauthCookieOptions = {
   httpOnly: true,
-  sameSite: 'lax',
+  // Vercel and Render are different sites. The session cookie must be
+  // allowed on credentialed cross-site requests from the frontend.
+  sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
   secure: process.env.NODE_ENV === 'production',
   maxAge: 7 * 24 * 60 * 60 * 1000,
   path: '/',
