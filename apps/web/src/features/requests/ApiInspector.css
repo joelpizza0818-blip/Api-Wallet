@@ -3,6 +3,9 @@
   flex-direction: column;
   height: 100%;
   overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+  min-width: 0;
   padding: var(--spacing-4);
   gap: var(--spacing-4);
   background-color: var(--color-background);
@@ -17,6 +20,8 @@
   border-radius: var(--radius-md);
   padding: 4px;
   gap: var(--spacing-2);
+  min-width: 0;
+  flex: 0 0 auto;
 }
 
 .wb-method-select-wrap {
@@ -105,6 +110,7 @@
 /* Endpoint Metadata */
 .wb-endpoint-meta {
   padding: 0 var(--spacing-1);
+  flex: 0 0 auto;
 }
 
 .wb-endpoint-title {
@@ -124,6 +130,9 @@
   display: flex;
   gap: var(--spacing-2);
   border-bottom: 1px solid var(--color-border);
+  overflow-x: auto;
+  scrollbar-width: thin;
+  flex: 0 0 auto;
 }
 
 .wb-req-tab {
@@ -139,6 +148,7 @@
   border-bottom: 2px solid transparent;
   cursor: pointer;
   transition: all var(--transition-fast);
+  flex: 0 0 auto;
 }
 
 .wb-req-tab:hover {
@@ -160,16 +170,22 @@
 /* Tab Panels */
 .wb-tab-panel {
   min-height: 110px;
+  min-width: 0;
+  flex: 0 0 auto;
 }
 
 .wb-table-wrap {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  overflow: hidden;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: visible;
+  scrollbar-width: thin;
 }
 
 .wb-table {
   width: 100%;
+  min-width: 560px;
   border-collapse: collapse;
   text-align: left;
   font-size: var(--font-size-xs);
@@ -203,6 +219,7 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   padding: var(--spacing-3);
+  min-width: 0;
 }
 
 .wb-auth-type-row {
@@ -237,6 +254,7 @@
   border-radius: var(--radius-md);
   overflow: hidden;
   background-color: var(--color-surface);
+  min-width: 0;
 }
 
 .wb-body-type-bar {
@@ -273,6 +291,8 @@
   border-radius: var(--radius-md);
   background-color: var(--color-surface);
   overflow: hidden;
+  min-width: 0;
+  flex: 0 0 auto;
 }
 
 .wb-response-header {
@@ -282,6 +302,7 @@
   padding: var(--spacing-2) var(--spacing-3);
   background-color: var(--color-surface-alt);
   border-bottom: 1px solid var(--color-border);
+  min-width: 0;
 }
 
 .wb-response-title {
@@ -291,6 +312,8 @@
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text);
+  min-width: 0;
+  flex-wrap: wrap;
 }
 
 .wb-status-tag {
@@ -326,8 +349,10 @@
 
 .wb-response-body {
   padding: var(--spacing-3);
-  max-height: 250px;
+  min-height: 120px;
+  max-height: min(45vh, 520px);
   overflow-y: auto;
+  overflow-x: auto;
 }
 
 .wb-json-code {
@@ -336,6 +361,7 @@
   color: var(--color-text);
   line-height: 1.5;
   margin: 0;
+  white-space: pre;
 }
 
 /* Postman-like Scripts Layout */
@@ -546,5 +572,69 @@
 .wb-auth-save-hint {
   font-size: 10px;
   color: var(--color-text-muted);
+}
+
+@media (max-width: 640px) {
+  .wb-inspector {
+    height: auto;
+    min-height: calc(100vh - 48px - 28px);
+    overflow: visible;
+    padding: var(--spacing-3);
+    gap: var(--spacing-3);
+  }
+
+  .wb-request-bar {
+    flex-wrap: wrap;
+  }
+
+  .wb-method-select-wrap,
+  .wb-method-select,
+  .wb-url-input {
+    min-width: 0;
+  }
+
+  .wb-method-select-wrap {
+    flex: 0 0 auto;
+  }
+
+  .wb-url-input {
+    flex: 1 1 150px;
+  }
+
+  .wb-send-btn,
+  .wb-request-bar > .wb-copy-btn {
+    flex: 1 1 auto;
+  }
+
+  .wb-response-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: var(--spacing-2);
+  }
+
+  .wb-response-body {
+    max-height: 45vh;
+  }
+
+  .wb-scripts-layout {
+    flex-direction: column;
+  }
+
+  .wb-scripts-sidebar {
+    width: 100%;
+    flex-direction: row;
+    border-right: none;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .wb-scripts-subtab {
+    flex: 1 1 50%;
+    border-left: none;
+    border-bottom: 3px solid transparent;
+  }
+
+  .wb-scripts-subtab--active {
+    border-bottom-color: var(--color-primary);
+  }
 }
 

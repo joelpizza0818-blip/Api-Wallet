@@ -114,23 +114,17 @@ async function getPlaintextApiKey(apiKeyId) {
 }
 
 /**
- * Revokes an API Key without breaking historical execution relations.
+ * Permanently deletes an API key without breaking historical execution relations.
  */
 async function revokeApiKey(apiKeyId) {
   if (!apiKeyId) throw fail('apiKeyId is required');
 
-  const key = await prisma.apiKey.findUnique({ where: { id: apiKeyId } });
-  if (!key) throw fail('API key not found', 404);
-
-  const updated = await prisma.apiKey.update({
-    where: { id: apiKeyId },
-    data: {
-      status: 'REVOKED',
-      revokedAt: new Date(),
-    },
-  });
-
-  return sanitizeApiKey(updated);
+  try {
+    return await prisma.apiKey.delete({ where: { id: apiKeyId } });
+  } catch (error) {
+    if (error.code === 'P2025') throw fail('API key not found', 404);
+    throw error;
+  }
 }
 
 /**

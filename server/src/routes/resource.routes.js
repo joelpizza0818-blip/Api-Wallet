@@ -15,5 +15,5 @@ router.route('/projects/:projectId/environments').get(c.listEnvironments).post(c
 router.route('/environments/:environmentId/secrets').get(c.listSecrets).post(c.createSecret);
 router.delete('/secrets/:secretId', c.removeSecret);
 router.route('/projects/:projectId/api-keys').get(c.listApiKeys).post(c.createApiKey);
-router.post('/api-keys/:apiKeyId/revoke', c.revokeApiKey);
+router.delete('/api-keys/:apiKeyId', c.revokeApiKey);
 module.exports = router;

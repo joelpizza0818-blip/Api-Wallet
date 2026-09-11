@@ -222,7 +222,7 @@ export function WorkspaceProvider({ children }) {
     return key;
   };
   const deleteApiKey = async (keyId) => {
-    const response = await fetch(`${API_URL}/api/api-keys/${keyId}/revoke`, { method: 'POST', credentials: 'include' });
+    const response = await fetch(`${API_URL}/api/api-keys/${keyId}`, { method: 'DELETE', credentials: 'include' });
     if (!response.ok) throw new Error('No se pudo revocar la API key');
     setApiKeys((items) => items.filter((item) => item.id !== keyId));
   };

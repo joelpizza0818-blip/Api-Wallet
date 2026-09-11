@@ -14,6 +14,7 @@
   height: calc(100vh - 48px - 28px);
   overflow: hidden;
   min-width: 0;
+  min-height: 0;
 }
 
 /* Center Canvas */
@@ -24,6 +25,7 @@
   height: 100%;
   overflow: hidden;
   min-width: 0;
+  min-height: 0;
   background-color: var(--color-background);
 }
 
@@ -153,6 +155,7 @@
   height: calc(100% - 38px);
   overflow: auto;
   min-height: 0;
+  min-width: 0;
 }
 
 .wb-context-menu {
@@ -186,9 +189,41 @@
 .ai-chat-fab{position:fixed;right:18px;bottom:43px;width:44px;height:44px;border-radius:50%;border:1px solid var(--color-primary);background:var(--color-primary);color:#fff;font-size:22px;cursor:pointer;z-index:2300;box-shadow:0 5px 18px #0004;opacity:1;transform:translateY(0) scale(1);transition:opacity 180ms ease,transform 180ms ease}.ai-chat-fab:hover{transform:translateY(-2px) scale(1)}.ai-chat-fab.is-hidden{opacity:0;pointer-events:none;transform:translateY(10px) scale(.9)}
 
 @media (max-width: 900px) {
-  .wb-main-container { overflow: auto; }
-  .wb-sidebar { min-width: 250px; }
-  .wb-canvas { min-width: 620px; }
+  .wb-main-container { overflow: hidden; }
+  .wb-sidebar { width: min(30vw, 250px); min-width: 190px; }
+  .wb-canvas { min-width: 0; }
+}
+
+@media (max-width: 640px) {
+  .wb-main-container {
+    flex: 1 1 auto;
+    flex-direction: column;
+    height: auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .wb-sidebar {
+    width: 100%;
+    min-width: 0;
+    height: auto;
+    max-height: 34vh;
+    flex: 0 0 auto;
+  }
+
+  .wb-canvas {
+    width: 100%;
+    height: auto;
+    min-height: calc(100vh - 48px - 28px);
+    flex: 0 0 auto;
+    overflow: visible;
+  }
+
+  .wb-canvas-content {
+    height: auto;
+    overflow: visible;
+  }
 }
 
 /* Bottom status bar */
