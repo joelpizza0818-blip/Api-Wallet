@@ -9,6 +9,7 @@ import WorkspaceOverview from '../../features/workspaces/WorkspaceOverview';
 import ApiInspector from '../../features/requests/ApiInspector';
 import TopBar from '../../features/workspaces/TopBar';
 import TerminalDrawer from '../../components/common/TerminalDrawer/TerminalDrawer';
+import AiChat from '../../components/common/AiChat/AiChat';
 import { useWorkspace } from '../../features/workspaces/WorkspaceContext';
 import {
   NewKeyModal,
@@ -36,6 +37,7 @@ function WorkspacePage() {
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isTerminalOpen, setIsTerminalOpen] = useState(false);
+  const [isAiChatOpen, setIsAiChatOpen] = useState(false);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -365,6 +367,9 @@ function WorkspacePage() {
       </div>
 
       <TerminalDrawer isOpen={isTerminalOpen} onClose={() => setIsTerminalOpen(false)} />
+      <button className={`ai-chat-backdrop ${isAiChatOpen ? 'is-visible' : ''}`} onClick={() => setIsAiChatOpen(false)} aria-label="Cerrar asistente IA" tabIndex={isAiChatOpen ? 0 : -1} />
+      <button className={`ai-chat-fab ${isAiChatOpen ? 'is-hidden' : ''}`} onClick={() => setIsAiChatOpen(true)} aria-label="Abrir asistente IA" title="Asistente IA" tabIndex={isAiChatOpen ? -1 : 0}>✦</button>
+      <AiChat isOpen={isAiChatOpen} onClose={() => setIsAiChatOpen(false)} />
     </div>
   );
 }

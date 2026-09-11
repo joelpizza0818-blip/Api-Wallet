@@ -181,6 +181,9 @@
 
 .wb-context-menu button:hover { background: var(--color-surface-alt); color: var(--color-primary); }
 .wb-context-menu .wb-context-menu-danger { color: var(--color-danger); }
+.ai-chat-backdrop{position:fixed;inset:0;border:0;background:transparent;z-index:2100;cursor:default;opacity:0;pointer-events:none;transition:opacity 180ms ease}
+.ai-chat-backdrop.is-visible{opacity:1;pointer-events:auto}
+.ai-chat-fab{position:fixed;right:18px;bottom:43px;width:44px;height:44px;border-radius:50%;border:1px solid var(--color-primary);background:var(--color-primary);color:#fff;font-size:22px;cursor:pointer;z-index:2300;box-shadow:0 5px 18px #0004;opacity:1;transform:translateY(0) scale(1);transition:opacity 180ms ease,transform 180ms ease}.ai-chat-fab:hover{transform:translateY(-2px) scale(1)}.ai-chat-fab.is-hidden{opacity:0;pointer-events:none;transform:translateY(10px) scale(.9)}
 
 @media (max-width: 900px) {
   .wb-main-container { overflow: auto; }
@@ -254,4 +257,3 @@
 .wb-bottom-stat {
   font-size: 11px;
 }
-

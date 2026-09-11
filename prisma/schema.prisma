@@ -94,6 +94,7 @@ model User {
   invitationsReceived WorkspaceInvitation[] @relation("InvitationRecipient")
   activities Activity[]
   notifications Notification[]
+  aiChats AiChat[]
   preferences UserPreference?
   @@index([status])
   @@map("users")
@@ -435,4 +436,27 @@ model Notification {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@index([userId, readAt, createdAt])
   @@map("notifications")
+}
+
+model AiChat {
+  id String @id @default(cuid())
+  userId String
+  title String @default("Nuevo chat")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages AiMessage[]
+  @@index([userId, updatedAt])
+  @@map("ai_chats")
+}
+
+model AiMessage {
+  id String @id @default(cuid())
+  chatId String
+  role String
+  content String
+  createdAt DateTime @default(now())
+  chat AiChat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  @@index([chatId, createdAt])
+  @@map("ai_messages")
 }
