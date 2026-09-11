@@ -7,7 +7,7 @@ import FlowsView from '../requests/FlowsView';
 import './WorkspaceOverview.css';
 
 function WorkspaceOverview({ onNavigateApis, onNavigateDocs, onNavigateFlows, onNavigateKeys, onOpenSettings, onOpenNewFlowModal }) {
-  const { collections, apiKeys, workspaceName, updateCollection } = useWorkspace();
+  const { collections, apiKeys, workspaceName, updateCollection, addApiKey } = useWorkspace();
   const { user } = useAuth();
   const { notify } = useFeedback();
   const [activeTab, setActiveTab] = useState('overview');
@@ -140,17 +140,140 @@ function WorkspaceOverview({ onNavigateApis, onNavigateDocs, onNavigateFlows, on
           </div>
         </div>
 
-        {activeTab === 'authorization' && <div className="wb-postman-welcome-card">
-          <h2>Autorización de la colección</h2>
-          <p>Configura credenciales compartidas para las requests de esta colección.</p>
-          <select className="wb-auth-select" value={authorization.type} onChange={(event) => setAuthorization({ ...authorization, type: event.target.value })}>
-            <option value="none">No Auth</option><option value="bearer">Bearer Token</option><option value="apikey">API Key Header</option><option value="basic">Basic Auth</option><option value="oauth2">OAuth 2.0 Bearer</option>
-          </select>
-          {(authorization.type === 'bearer' || authorization.type === 'oauth2') && <input className="wb-url-input" type="password" placeholder="Token" value={authorization.token || ''} onChange={(event) => setAuthorization({ ...authorization, token: event.target.value })} />}
-          {authorization.type === 'apikey' && <><input className="wb-url-input" placeholder="Nombre del header" value={authorization.key || ''} onChange={(event) => setAuthorization({ ...authorization, key: event.target.value })} /><input className="wb-url-input" type="password" placeholder="Valor" value={authorization.value || ''} onChange={(event) => setAuthorization({ ...authorization, value: event.target.value })} /></>}
-          {authorization.type === 'basic' && <><input className="wb-url-input" placeholder="Usuario" value={authorization.username || ''} onChange={(event) => setAuthorization({ ...authorization, username: event.target.value })} /><input className="wb-url-input" type="password" placeholder="Contraseña" value={authorization.password || ''} onChange={(event) => setAuthorization({ ...authorization, password: event.target.value })} /></>}
-          <button type="button" className="wb-ov-btn wb-ov-btn--primary" onClick={async () => { if (collection) { await updateCollection(collection.id, { authorization }); setSaved(true); setTimeout(() => setSaved(false), 1600); } }}>{saved ? 'Guardado' : 'Guardar autorización'}</button>
-        </div>}
+        {activeTab === 'authorization' && (
+          <div className="wb-postman-welcome-card">
+            <h2>Autorización de la colección</h2>
+            <p>Configura credenciales compartidas para las requests de esta colección.</p>
+            <select
+              className="wb-auth-select"
+              value={authorization.type}
+              onChange={(event) => setAuthorization({ ...authorization, type: event.target.value })}
+            >
+              <option value="none">No Auth</option>
+              <option value="bearer">Bearer Token</option>
+              <option value="apikey">API Key Header</option>
+              <option value="basic">Basic Auth</option>
+              <option value="oauth2">OAuth 2.0 Bearer</option>
+            </select>
+
+            {(authorization.type === 'bearer' || authorization.type === 'oauth2') && (
+              <input
+                className="wb-url-input"
+                type="password"
+                placeholder="Token"
+                value={authorization.token || ''}
+                onChange={(event) => setAuthorization({ ...authorization, token: event.target.value })}
+              />
+            )}
+
+            {authorization.type === 'apikey' && (
+              <div className="wb-auth-fields-stack">
+                <input
+                  className="wb-url-input"
+                  placeholder="Nombre del header (ej. X-API-Key)"
+                  value={authorization.key || ''}
+                  onChange={(event) => setAuthorization({ ...authorization, key: event.target.value })}
+                />
+
+                {apiKeys && apiKeys.length > 0 && (
+                  <select
+                    className="wb-auth-select"
+                    value={authorization.apiKeyId || ''}
+                    onChange={(e) => {
+                      const chosenId = e.target.value;
+                      const chosen = apiKeys.find((k) => k.id === chosenId);
+                      if (chosen) {
+                        setAuthorization({
+                          ...authorization,
+                          apiKeyId: chosen.id,
+                          value: chosen.key || `${chosen.prefix}_••••${chosen.lastFourCharacters || ''}`,
+                        });
+                      } else {
+                        setAuthorization({
+                          ...authorization,
+                          apiKeyId: '',
+                        });
+                      }
+                    }}
+                  >
+                    <option value="">-- Seleccionar de mis API Keys guardadas --</option>
+                    {apiKeys.map((k) => (
+                      <option key={k.id} value={k.id}>
+                        🔑 {k.name} ({k.prefix || 'sk'}_••••{k.lastFourCharacters || '••••'})
+                      </option>
+                    ))}
+                  </select>
+                )}
+
+                <input
+                  className="wb-url-input"
+                  type="password"
+                  placeholder="Valor de la API key"
+                  value={authorization.value || ''}
+                  onChange={(event) => setAuthorization({ ...authorization, apiKeyId: '', value: event.target.value })}
+                />
+
+                {authorization.value && !authorization.apiKeyId && (
+                  <div className="wb-auth-save-box">
+                    <button
+                      type="button"
+                      className="wb-auth-save-inline-btn"
+                      onClick={async () => {
+                        try {
+                          const created = await addApiKey({
+                            name: `Key ${collection?.name || 'Colección'}`,
+                            key: authorization.value,
+                            environment: 'Producción',
+                            scope: 'Full Access',
+                          });
+                          setAuthorization({ ...authorization, apiKeyId: created.id });
+                          notify('API Key guardada en la lista de keys del proyecto.');
+                        } catch (err) {
+                          notify(err.message || 'Error al guardar la API Key', 'error');
+                        }
+                      }}
+                    >
+                      💾 Guardar en API Keys del proyecto
+                    </button>
+                    <small className="wb-auth-save-hint">Si no la guardas, se usará únicamente en esta cabecera.</small>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {authorization.type === 'basic' && (
+              <>
+                <input
+                  className="wb-url-input"
+                  placeholder="Usuario"
+                  value={authorization.username || ''}
+                  onChange={(event) => setAuthorization({ ...authorization, username: event.target.value })}
+                />
+                <input
+                  className="wb-url-input"
+                  type="password"
+                  placeholder="Contraseña"
+                  value={authorization.password || ''}
+                  onChange={(event) => setAuthorization({ ...authorization, password: event.target.value })}
+                />
+              </>
+            )}
+
+            <button
+              type="button"
+              className="wb-ov-btn wb-ov-btn--primary"
+              onClick={async () => {
+                if (collection) {
+                  await updateCollection(collection.id, { authorization });
+                  setSaved(true);
+                  setTimeout(() => setSaved(false), 1600);
+                }
+              }}
+            >
+              {saved ? 'Guardado' : 'Guardar autorización'}
+            </button>
+          </div>
+        )}
 
         {activeTab === 'scripts' && <div className="wb-postman-welcome-card"><h2>Scripts de la colección</h2><p>Estos scripts pueden preparar variables o validar respuestas comunes.</p><label>Before request<textarea className="wb-body-textarea" rows={7} value={preRequestScript} onChange={(event) => setPreRequestScript(event.target.value)} placeholder="pm.variables.token = '...';" /></label><label>After response<textarea className="wb-body-textarea" rows={7} value={testScript} onChange={(event) => setTestScript(event.target.value)} placeholder="pm.expect(pm.response.status).to.eql(200);" /></label><button type="button" className="wb-ov-btn wb-ov-btn--primary" onClick={async () => { if (collection) { await updateCollection(collection.id, { preRequestScript, testScript }); setSaved(true); setTimeout(() => setSaved(false), 1600); } }}>{saved ? 'Guardado' : 'Guardar scripts'}</button></div>}
 

@@ -2,45 +2,459 @@ const crypto = require('crypto');
 const prisma = require('../config/database');
 const { WRITE_ROLES, ADMIN_ROLES, requireWorkspaceRole, projectAccess } = require('../services/authorization.service');
 const { sendWorkspaceInvitation } = require('../services/email.service');
-const { runFlow } = require('../services/flow.service');
+const flowService = require('../services/flow.service');
+const { createActivity } = require('../services/activity.service');
+
 const fail = (message, statusCode = 400) => Object.assign(new Error(message), { statusCode });
 const respond = (res, data, status = 200) => res.status(status).json({ success: true, data });
 
-async function listInvitations(req, res) { await requireWorkspaceRole(req.user.id, req.params.workspaceId, ADMIN_ROLES); respond(res, await prisma.workspaceInvitation.findMany({ where: { workspaceId: req.params.workspaceId, acceptedAt: null }, select: { id: true, email: true, role: true, expiresAt: true, createdAt: true, invitedBy: { select: { name: true, email: true } } } })); }
-async function listMyInvitations(req, res) { respond(res, await prisma.workspaceInvitation.findMany({ where: { email: req.user.email.toLowerCase(), acceptedAt: null, expiresAt: { gt: new Date() } }, select: { id: true, email: true, role: true, expiresAt: true, createdAt: true, workspace: { select: { id: true, name: true, description: true } } }, orderBy: { createdAt: 'desc' } })); }
+// =================== INVITATIONS ===================
+async function listInvitations(req, res) {
+  await requireWorkspaceRole(req.user.id, req.params.workspaceId, ADMIN_ROLES);
+  respond(
+    res,
+    await prisma.workspaceInvitation.findMany({
+      where: { workspaceId: req.params.workspaceId, acceptedAt: null },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        expiresAt: true,
+        createdAt: true,
+        invitedBy: { select: { name: true, email: true } },
+      },
+    })
+  );
+}
+
+async function listMyInvitations(req, res) {
+  respond(
+    res,
+    await prisma.workspaceInvitation.findMany({
+      where: {
+        email: req.user.email.toLowerCase(),
+        acceptedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        expiresAt: true,
+        createdAt: true,
+        workspace: { select: { id: true, name: true, description: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    })
+  );
+}
+
 async function invite(req, res) {
   await requireWorkspaceRole(req.user.id, req.params.workspaceId, ADMIN_ROLES);
-  const email = req.body.email?.trim().toLowerCase(); if (!email || !/^\S+@\S+\.\S+$/.test(email)) throw fail('A valid email is required');
-  if (!['ADMIN','DEVELOPER','QA','VIEWER'].includes(req.body.role)) throw fail('Invalid invitation role');
+  const email = req.body.email?.trim().toLowerCase();
+  if (!email || !/^\S+@\S+\.\S+$/.test(email)) throw fail('A valid email is required');
+  if (!['ADMIN', 'DEVELOPER', 'QA', 'VIEWER'].includes(req.body.role)) throw fail('Invalid invitation role');
+
   const rawToken = crypto.randomBytes(32).toString('base64url');
-  const invitation = await prisma.workspaceInvitation.upsert({ where: { workspaceId_email: { workspaceId: req.params.workspaceId, email } }, update: { role: req.body.role, invitedById: req.user.id, tokenHash: crypto.createHash('sha256').update(rawToken).digest('hex'), expiresAt: new Date(Date.now() + 7 * 86400000), acceptedAt: null, acceptedById: null }, create: { workspaceId: req.params.workspaceId, email, role: req.body.role, invitedById: req.user.id, tokenHash: crypto.createHash('sha256').update(rawToken).digest('hex'), expiresAt: new Date(Date.now() + 7 * 86400000) } });
-  const workspace = await prisma.workspace.findUnique({ where: { id: req.params.workspaceId }, select: { name: true } });
-  const delivery = await sendWorkspaceInvitation({ email, workspaceName: workspace.name, role: invitation.role, token: rawToken });
-  respond(res, { id: invitation.id, email: invitation.email, role: invitation.role, expiresAt: invitation.expiresAt, delivery: { delivered: delivery.delivered } }, 201);
+  const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+
+  const invitation = await prisma.workspaceInvitation.upsert({
+    where: { workspaceId_email: { workspaceId: req.params.workspaceId, email } },
+    update: {
+      role: req.body.role,
+      invitedById: req.user.id,
+      tokenHash,
+      expiresAt: new Date(Date.now() + 7 * 86400000),
+      acceptedAt: null,
+      acceptedById: null,
+    },
+    create: {
+      workspaceId: req.params.workspaceId,
+      email,
+      role: req.body.role,
+      invitedById: req.user.id,
+      tokenHash,
+      expiresAt: new Date(Date.now() + 7 * 86400000),
+    },
+  });
+
+  const workspace = await prisma.workspace.findUnique({
+    where: { id: req.params.workspaceId },
+    select: { name: true },
+  });
+
+  const delivery = await sendWorkspaceInvitation({
+    email,
+    workspaceName: workspace.name,
+    role: invitation.role,
+    token: rawToken,
+  });
+
+  await createActivity({
+    workspaceId: req.params.workspaceId,
+    userId: req.user.id,
+    type: 'MEMBER_INVITED',
+    entityType: 'invitation',
+    entityId: invitation.id,
+    metadata: { email, role: invitation.role },
+  }).catch(() => {});
+
+  respond(
+    res,
+    {
+      id: invitation.id,
+      email: invitation.email,
+      role: invitation.role,
+      expiresAt: invitation.expiresAt,
+      delivery: { delivered: delivery.delivered },
+    },
+    201
+  );
 }
-async function cancelInvitation(req, res) { const item = await prisma.workspaceInvitation.findUnique({ where: { id: req.params.invitationId } }); if (!item) throw fail('Invitation not found', 404); await requireWorkspaceRole(req.user.id, item.workspaceId, ADMIN_ROLES); await prisma.workspaceInvitation.delete({ where: { id: item.id } }); res.status(204).end(); }
-async function acceptInvitation(req, res) { const tokenHash = crypto.createHash('sha256').update(req.body.token || '').digest('hex'); const invitation = await prisma.workspaceInvitation.findUnique({ where: { tokenHash } }); return acceptInvitationRecord(req, res, invitation); }
-async function acceptInvitationById(req, res) { const invitation = await prisma.workspaceInvitation.findUnique({ where: { id: req.params.invitationId } }); return acceptInvitationRecord(req, res, invitation); }
-async function acceptInvitationRecord(req, res, invitation) { if (!invitation || invitation.acceptedAt || invitation.expiresAt < new Date()) throw fail('Invitation is invalid or expired', 400); if (invitation.email.toLowerCase() !== req.user.email.toLowerCase()) throw fail('Invitation belongs to another email', 403); await prisma.$transaction([prisma.workspaceMember.upsert({ where: { workspaceId_userId: { workspaceId: invitation.workspaceId, userId: req.user.id } }, update: { role: invitation.role, status: 'ACTIVE' }, create: { workspaceId: invitation.workspaceId, userId: req.user.id, role: invitation.role } }), prisma.workspaceInvitation.update({ where: { id: invitation.id }, data: { acceptedAt: new Date(), acceptedById: req.user.id } })]); respond(res, { workspaceId: invitation.workspaceId }); }
-async function joinWorkspaceByCode(req, res) { const code = req.body.code?.trim(); if (!code) throw fail('Workspace code is required'); const workspace = await prisma.workspace.findUnique({ where: { inviteCode: code } }); if (!workspace) throw fail('Workspace code is invalid', 404); await prisma.workspaceMember.upsert({ where: { workspaceId_userId: { workspaceId: workspace.id, userId: req.user.id } }, update: { status: 'ACTIVE' }, create: { workspaceId: workspace.id, userId: req.user.id, role: 'DEVELOPER' } }); respond(res, { workspaceId: workspace.id, workspaceName: workspace.name }); }
 
-async function listFlows(req, res) { await projectAccess(req.user.id, req.params.projectId); respond(res, await prisma.flow.findMany({ where: { projectId: req.params.projectId }, include: { collection: { select: { name: true } }, request: { select: { name: true, method: true, path: true } } }, orderBy: { updatedAt: 'desc' } })); }
-async function createFlow(req, res) { const project = await projectAccess(req.user.id, req.params.projectId, WRITE_ROLES); const targetType = req.body.targetType; if (!['COLLECTION','REQUEST'].includes(targetType) || !Number.isInteger(req.body.intervalMinutes) || req.body.intervalMinutes < 1) throw fail('A valid target and interval are required'); if (targetType === 'COLLECTION' && !req.body.collectionId) throw fail('collectionId is required'); if (targetType === 'REQUEST' && !req.body.requestId) throw fail('requestId is required'); const requestedName = req.body.name?.trim() || 'Untitled Flow'; let name = requestedName; let suffix = 2; while (await prisma.flow.findFirst({ where: { projectId: project.id, name }, select: { id: true } })) name = `${requestedName} (${suffix++})`; const flow = await prisma.flow.create({ data: { projectId: project.id, name, targetType, collectionId: targetType === 'COLLECTION' ? req.body.collectionId : null, requestId: targetType === 'REQUEST' ? req.body.requestId : null, intervalMinutes: req.body.intervalMinutes, notifyOnError: req.body.notifyOnError !== false } }); respond(res, flow, 201); }
-async function updateFlow(req, res) { const flow = await prisma.flow.findUnique({ where: { id: req.params.flowId }, include: { project: true } }); if (!flow) throw fail('Flow not found', 404); await requireWorkspaceRole(req.user.id, flow.project.workspaceId, WRITE_ROLES); respond(res, await prisma.flow.update({ where: { id: flow.id }, data: { ...(req.body.name && { name: req.body.name.trim() }), ...(req.body.status && { status: req.body.status }), ...(typeof req.body.notifyOnError === 'boolean' && { notifyOnError: req.body.notifyOnError }) } })); }
-async function removeFlow(req, res) { const flow = await prisma.flow.findUnique({ where: { id: req.params.flowId }, include: { project: true } }); if (!flow) throw fail('Flow not found', 404); await requireWorkspaceRole(req.user.id, flow.project.workspaceId, WRITE_ROLES); await prisma.flow.delete({ where: { id: flow.id } }); res.status(204).end(); }
-async function runFlowNow(req, res) { const flow = await prisma.flow.findUnique({ where: { id: req.params.flowId }, include: { project: true } }); if (!flow) throw fail('Flow not found', 404); await requireWorkspaceRole(req.user.id, flow.project.workspaceId, WRITE_ROLES); respond(res, await runFlow(flow.id)); }
-async function listExecutions(req, res) { await projectAccess(req.user.id, req.params.projectId); respond(res, await prisma.requestExecution.findMany({ where: { request: { collection: { projectId: req.params.projectId } } }, include: { request: { select: { name: true, method: true, path: true } }, flow: { select: { name: true } } }, orderBy: { executedAt: 'desc' }, take: 100 })); }
+async function cancelInvitation(req, res) {
+  const item = await prisma.workspaceInvitation.findUnique({ where: { id: req.params.invitationId } });
+  if (!item) throw fail('Invitation not found', 404);
 
-async function listDocuments(req, res) { await projectAccess(req.user.id, req.params.projectId); respond(res, await prisma.document.findMany({ where: { projectId: req.params.projectId }, orderBy: { updatedAt: 'desc' } })); }
-async function createDocument(req, res) { const project = await projectAccess(req.user.id, req.params.projectId, WRITE_ROLES); if (!req.body.name?.trim() || typeof req.body.content !== 'string') throw fail('Document name and content are required'); respond(res, await prisma.document.create({ data: { projectId: project.id, name: req.body.name.trim(), content: req.body.content, type: req.body.type || 'MARKDOWN', status: req.body.status || 'DRAFT' } }), 201); }
-async function updateDocument(req, res) { const item = await prisma.document.findUnique({ where: { id: req.params.documentId }, include: { project: true } }); if (!item) throw fail('Document not found', 404); await requireWorkspaceRole(req.user.id, item.project.workspaceId, WRITE_ROLES); respond(res, await prisma.document.update({ where: { id: item.id }, data: { ...(req.body.name && { name: req.body.name.trim() }), ...(typeof req.body.content === 'string' && { content: req.body.content }), ...(req.body.status && { status: req.body.status }) } })); }
-async function deleteDocument(req, res) { const item = await prisma.document.findUnique({ where: { id: req.params.documentId }, include: { project: true } }); if (!item) throw fail('Document not found', 404); await requireWorkspaceRole(req.user.id, item.project.workspaceId, WRITE_ROLES); await prisma.document.delete({ where: { id: item.id } }); res.status(204).end(); }
+  await requireWorkspaceRole(req.user.id, item.workspaceId, ADMIN_ROLES);
+  await prisma.workspaceInvitation.delete({ where: { id: item.id } });
+  res.status(204).end();
+}
 
-async function listMocks(req, res) { await projectAccess(req.user.id, req.params.projectId); respond(res, await prisma.mockServer.findMany({ where: { projectId: req.params.projectId }, include: { routes: true } })); }
-async function createMock(req, res) { const project = await projectAccess(req.user.id, req.params.projectId, WRITE_ROLES); if (!req.body.name?.trim() || !req.body.slug?.trim()) throw fail('Mock name and slug are required'); respond(res, await prisma.mockServer.create({ data: { projectId: project.id, name: req.body.name.trim(), slug: req.body.slug.trim().toLowerCase(), port: Number.isInteger(req.body.port) ? req.body.port : null } }), 201); }
-async function addMockRoute(req, res) { const mock = await prisma.mockServer.findUnique({ where: { id: req.params.mockId }, include: { project: true } }); if (!mock) throw fail('Mock server not found', 404); await requireWorkspaceRole(req.user.id, mock.project.workspaceId, WRITE_ROLES); if (!['GET','POST','PUT','PATCH','DELETE','HEAD','OPTIONS'].includes(req.body.method) || !req.body.path?.startsWith('/')) throw fail('Invalid mock route'); respond(res, await prisma.mockRoute.create({ data: { mockServerId: mock.id, requestId: req.body.requestId || null, method: req.body.method, path: req.body.path, statusCode: req.body.statusCode || 200, responseHeaders: Array.isArray(req.body.responseHeaders) ? req.body.responseHeaders : [], responseBody: req.body.responseBody || null } }), 201); }
-async function updateMock(req, res) { const item = await prisma.mockServer.findUnique({ where: { id: req.params.mockId }, include: { project: true } }); if (!item) throw fail('Mock server not found', 404); await requireWorkspaceRole(req.user.id, item.project.workspaceId, WRITE_ROLES); respond(res, await prisma.mockServer.update({ where: { id: item.id }, data: { ...(req.body.name && { name: req.body.name.trim() }), ...(req.body.status && { status: req.body.status }) } })); }
-async function deleteMock(req, res) { const item = await prisma.mockServer.findUnique({ where: { id: req.params.mockId }, include: { project: true } }); if (!item) throw fail('Mock server not found', 404); await requireWorkspaceRole(req.user.id, item.project.workspaceId, WRITE_ROLES); await prisma.mockServer.delete({ where: { id: item.id } }); res.status(204).end(); }
-async function deleteMockRoute(req, res) { const item = await prisma.mockRoute.findUnique({ where: { id: req.params.mockRouteId }, include: { mockServer: { include: { project: true } } } }); if (!item) throw fail('Mock route not found', 404); await requireWorkspaceRole(req.user.id, item.mockServer.project.workspaceId, WRITE_ROLES); await prisma.mockRoute.delete({ where: { id: item.id } }); res.status(204).end(); }
+async function acceptInvitation(req, res) {
+  const tokenHash = crypto.createHash('sha256').update(req.body.token || '').digest('hex');
+  const invitation = await prisma.workspaceInvitation.findUnique({ where: { tokenHash } });
+  return acceptInvitationRecord(req, res, invitation);
+}
 
-module.exports = { listInvitations, listMyInvitations, invite, cancelInvitation, acceptInvitation, acceptInvitationById, joinWorkspaceByCode, listFlows, createFlow, updateFlow, removeFlow, runFlowNow, listExecutions, listDocuments, createDocument, updateDocument, deleteDocument, listMocks, createMock, addMockRoute, updateMock, deleteMock, deleteMockRoute };
+async function acceptInvitationById(req, res) {
+  const invitation = await prisma.workspaceInvitation.findUnique({ where: { id: req.params.invitationId } });
+  return acceptInvitationRecord(req, res, invitation);
+}
+
+async function acceptInvitationRecord(req, res, invitation) {
+  if (!invitation || invitation.acceptedAt || invitation.expiresAt < new Date()) {
+    throw fail('Invitation is invalid or expired', 400);
+  }
+  if (invitation.email.toLowerCase() !== req.user.email.toLowerCase()) {
+    throw fail('Invitation belongs to another email', 403);
+  }
+
+  await prisma.$transaction([
+    prisma.workspaceMember.upsert({
+      where: {
+        workspaceId_userId: {
+          workspaceId: invitation.workspaceId,
+          userId: req.user.id,
+        },
+      },
+      update: { role: invitation.role, status: 'ACTIVE' },
+      create: { workspaceId: invitation.workspaceId, userId: req.user.id, role: invitation.role },
+    }),
+    prisma.workspaceInvitation.update({
+      where: { id: invitation.id },
+      data: { acceptedAt: new Date(), acceptedById: req.user.id },
+    }),
+  ]);
+
+  respond(res, { workspaceId: invitation.workspaceId });
+}
+
+async function joinWorkspaceByCode(req, res) {
+  const code = req.body.code?.trim();
+  if (!code) throw fail('Workspace code is required');
+
+  const workspace = await prisma.workspace.findUnique({ where: { inviteCode: code } });
+  if (!workspace) throw fail('Workspace code is invalid', 404);
+
+  await prisma.workspaceMember.upsert({
+    where: {
+      workspaceId_userId: {
+        workspaceId: workspace.id,
+        userId: req.user.id,
+      },
+    },
+    update: { status: 'ACTIVE' },
+    create: { workspaceId: workspace.id, userId: req.user.id, role: 'DEVELOPER' },
+  });
+
+  respond(res, { workspaceId: workspace.id, workspaceName: workspace.name });
+}
+
+// =================== FLOWS ===================
+async function listFlows(req, res) {
+  await projectAccess(req.user.id, req.params.projectId);
+  respond(
+    res,
+    await prisma.flow.findMany({
+      where: { projectId: req.params.projectId },
+      include: {
+        collection: { select: { id: true, name: true } },
+        request: { select: { id: true, name: true, method: true, path: true } },
+      },
+      orderBy: { updatedAt: 'desc' },
+    })
+  );
+}
+
+async function createFlow(req, res) {
+  const project = await projectAccess(req.user.id, req.params.projectId, WRITE_ROLES);
+  const flow = await flowService.createFlow(project.id, req.body);
+  await createActivity({
+    workspaceId: project.workspaceId,
+    userId: req.user.id,
+    type: 'FLOW_RUN',
+    entityType: 'flow',
+    entityId: flow.id,
+    metadata: { name: flow.name },
+  }).catch(() => {});
+  respond(res, flow, 201);
+}
+
+async function updateFlow(req, res) {
+  const flow = await prisma.flow.findUnique({
+    where: { id: req.params.flowId },
+    include: { project: true },
+  });
+  if (!flow) throw fail('Flow not found', 404);
+
+  await requireWorkspaceRole(req.user.id, flow.project.workspaceId, WRITE_ROLES);
+  respond(res, await flowService.updateFlow(flow.id, req.body));
+}
+
+async function removeFlow(req, res) {
+  const flow = await prisma.flow.findUnique({
+    where: { id: req.params.flowId },
+    include: { project: true },
+  });
+  if (!flow) throw fail('Flow not found', 404);
+
+  await requireWorkspaceRole(req.user.id, flow.project.workspaceId, WRITE_ROLES);
+  await flowService.deleteFlow(flow.id);
+  res.status(204).end();
+}
+
+async function runFlowNow(req, res) {
+  const flow = await prisma.flow.findUnique({
+    where: { id: req.params.flowId },
+    include: { project: true },
+  });
+  if (!flow) throw fail('Flow not found', 404);
+
+  await requireWorkspaceRole(req.user.id, flow.project.workspaceId, WRITE_ROLES);
+  respond(res, await flowService.runFlow(flow.id));
+}
+
+async function listExecutions(req, res) {
+  await projectAccess(req.user.id, req.params.projectId);
+  respond(
+    res,
+    await prisma.requestExecution.findMany({
+      where: { request: { collection: { projectId: req.params.projectId } } },
+      include: {
+        request: { select: { name: true, method: true, path: true } },
+        flow: { select: { name: true } },
+      },
+      orderBy: { executedAt: 'desc' },
+      take: 100,
+    })
+  );
+}
+
+// =================== DOCUMENTS ===================
+async function listDocuments(req, res) {
+  await projectAccess(req.user.id, req.params.projectId);
+  respond(
+    res,
+    await prisma.document.findMany({
+      where: { projectId: req.params.projectId },
+      orderBy: { updatedAt: 'desc' },
+    })
+  );
+}
+
+async function createDocument(req, res) {
+  const project = await projectAccess(req.user.id, req.params.projectId, WRITE_ROLES);
+  if (!req.body.name?.trim() || typeof req.body.content !== 'string') {
+    throw fail('Document name and content are required');
+  }
+
+  respond(
+    res,
+    await prisma.document.create({
+      data: {
+        projectId: project.id,
+        name: req.body.name.trim(),
+        content: req.body.content,
+        type: req.body.type || 'MARKDOWN',
+        status: req.body.status || 'DRAFT',
+      },
+    }),
+    201
+  );
+}
+
+async function updateDocument(req, res) {
+  const item = await prisma.document.findUnique({
+    where: { id: req.params.documentId },
+    include: { project: true },
+  });
+  if (!item) throw fail('Document not found', 404);
+
+  await requireWorkspaceRole(req.user.id, item.project.workspaceId, WRITE_ROLES);
+  respond(
+    res,
+    await prisma.document.update({
+      where: { id: item.id },
+      data: {
+        ...(req.body.name && { name: req.body.name.trim() }),
+        ...(typeof req.body.content === 'string' && { content: req.body.content }),
+        ...(req.body.status && { status: req.body.status }),
+      },
+    })
+  );
+}
+
+async function deleteDocument(req, res) {
+  const item = await prisma.document.findUnique({
+    where: { id: req.params.documentId },
+    include: { project: true },
+  });
+  if (!item) throw fail('Document not found', 404);
+
+  await requireWorkspaceRole(req.user.id, item.project.workspaceId, WRITE_ROLES);
+  await prisma.document.delete({ where: { id: item.id } });
+  res.status(204).end();
+}
+
+// =================== MOCKS ===================
+async function listMocks(req, res) {
+  await projectAccess(req.user.id, req.params.projectId);
+  respond(
+    res,
+    await prisma.mockServer.findMany({
+      where: { projectId: req.params.projectId },
+      include: { routes: true },
+    })
+  );
+}
+
+async function createMock(req, res) {
+  const project = await projectAccess(req.user.id, req.params.projectId, WRITE_ROLES);
+  if (!req.body.name?.trim() || !req.body.slug?.trim()) {
+    throw fail('Mock name and slug are required');
+  }
+
+  respond(
+    res,
+    await prisma.mockServer.create({
+      data: {
+        projectId: project.id,
+        name: req.body.name.trim(),
+        slug: req.body.slug.trim().toLowerCase(),
+        port: Number.isInteger(req.body.port) ? req.body.port : null,
+      },
+    }),
+    201
+  );
+}
+
+async function addMockRoute(req, res) {
+  const mock = await prisma.mockServer.findUnique({
+    where: { id: req.params.mockId },
+    include: { project: true },
+  });
+  if (!mock) throw fail('Mock server not found', 404);
+
+  await requireWorkspaceRole(req.user.id, mock.project.workspaceId, WRITE_ROLES);
+  const method = (req.body.method || 'GET').toUpperCase();
+  if (!['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'].includes(method) || !req.body.path?.startsWith('/')) {
+    throw fail('Invalid mock route');
+  }
+
+  respond(
+    res,
+    await prisma.mockRoute.create({
+      data: {
+        mockServerId: mock.id,
+        requestId: req.body.requestId || null,
+        method,
+        path: req.body.path,
+        statusCode: req.body.statusCode || 200,
+        responseHeaders: Array.isArray(req.body.responseHeaders) ? req.body.responseHeaders : [],
+        responseBody: req.body.responseBody || null,
+      },
+    }),
+    201
+  );
+}
+
+async function updateMock(req, res) {
+  const item = await prisma.mockServer.findUnique({
+    where: { id: req.params.mockId },
+    include: { project: true },
+  });
+  if (!item) throw fail('Mock server not found', 404);
+
+  await requireWorkspaceRole(req.user.id, item.project.workspaceId, WRITE_ROLES);
+  respond(
+    res,
+    await prisma.mockServer.update({
+      where: { id: item.id },
+      data: {
+        ...(req.body.name && { name: req.body.name.trim() }),
+        ...(req.body.status && { status: req.body.status }),
+      },
+    })
+  );
+}
+
+async function deleteMock(req, res) {
+  const item = await prisma.mockServer.findUnique({
+    where: { id: req.params.mockId },
+    include: { project: true },
+  });
+  if (!item) throw fail('Mock server not found', 404);
+
+  await requireWorkspaceRole(req.user.id, item.project.workspaceId, WRITE_ROLES);
+  await prisma.mockServer.delete({ where: { id: item.id } });
+  res.status(204).end();
+}
+
+async function deleteMockRoute(req, res) {
+  const item = await prisma.mockRoute.findUnique({
+    where: { id: req.params.mockRouteId },
+    include: { mockServer: { include: { project: true } } },
+  });
+  if (!item) throw fail('Mock route not found', 404);
+
+  await requireWorkspaceRole(req.user.id, item.mockServer.project.workspaceId, WRITE_ROLES);
+  await prisma.mockRoute.delete({ where: { id: item.id } });
+  res.status(204).end();
+}
+
+module.exports = {
+  listInvitations,
+  listMyInvitations,
+  invite,
+  cancelInvitation,
+  acceptInvitation,
+  acceptInvitationById,
+  joinWorkspaceByCode,
+  listFlows,
+  createFlow,
+  updateFlow,
+  removeFlow,
+  runFlowNow,
+  listExecutions,
+  listDocuments,
+  createDocument,
+  updateDocument,
+  deleteDocument,
+  listMocks,
+  createMock,
+  addMockRoute,
+  updateMock,
+  deleteMock,
+  deleteMockRoute,
+};

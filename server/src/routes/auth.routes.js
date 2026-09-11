@@ -6,6 +6,7 @@ const { currentUser, logout, register, login, updateProfile, changePassword } = 
 const { createToken, findOrCreateGoogleUser, findOrCreateGithubUser } = require('../services/auth.service');
 const { requireAuth } = require('../middleware/auth.middleware');
 const { authRateLimit } = require('../middleware/rate-limit.middleware');
+const prisma = require('../config/database');
 
 const router = express.Router();
 router.post('/register', authRateLimit, register);
@@ -85,6 +86,21 @@ if (hasGithubConfiguration()) {
 router.get('/me', requireAuth, currentUser);
 router.patch('/me', requireAuth, updateProfile);
 router.post('/change-password', requireAuth, changePassword);
+router.get('/preferences', requireAuth, async (req, res, next) => {
+  try {
+    const preferences = await prisma.userPreference.upsert({ where: { userId: req.user.id }, update: {}, create: { userId: req.user.id } });
+    res.json({ success: true, preferences });
+  } catch (error) { next(error); }
+});
+router.patch('/preferences', requireAuth, async (req, res, next) => {
+  try {
+    const data = {};
+    if (typeof req.body.primaryTheme === 'string') data.primaryTheme = req.body.primaryTheme.trim().slice(0, 40);
+    if (typeof req.body.accentColor === 'string') data.accentColor = req.body.accentColor.trim().slice(0, 40);
+    const preferences = await prisma.userPreference.upsert({ where: { userId: req.user.id }, update: data, create: { userId: req.user.id, ...data } });
+    res.json({ success: true, preferences });
+  } catch (error) { next(error); }
+});
 router.post('/logout', logout);
 
 module.exports = router;

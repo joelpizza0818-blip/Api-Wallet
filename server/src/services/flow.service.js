@@ -1,52 +1,238 @@
-const dns = require('dns').promises;
-const net = require('net');
 const prisma = require('../config/database');
+const { executeRequest } = require('./requestRunner.service');
 
-function isPrivateIp(address) {
-  if (net.isIP(address) === 4) return /^(10\.|127\.|0\.|169\.254\.|192\.168\.|172\.(1[6-9]|2\d|3[0-1])\.)/.test(address);
-  return address === '::1' || address.startsWith('fc') || address.startsWith('fd') || address.startsWith('fe80:');
+const fail = (message, statusCode = 400) => Object.assign(new Error(message), { statusCode });
+
+/**
+ * Validates that Flow target constraints are strictly fulfilled.
+ * COLLECTION -> collectionId provided, requestId null, collection belongs to projectId.
+ * REQUEST -> requestId provided, collectionId null, request belongs to projectId.
+ */
+async function validateFlowTarget(targetType, collectionId, requestId, projectId) {
+  if (!['COLLECTION', 'REQUEST'].includes(targetType)) {
+    throw fail('Invalid flow targetType. Must be COLLECTION or REQUEST');
+  }
+
+  if (targetType === 'COLLECTION') {
+    if (!collectionId) throw fail('collectionId is required for COLLECTION flow target');
+    if (requestId) throw fail('requestId must be null for COLLECTION flow target');
+
+    const collection = await prisma.collection.findFirst({
+      where: { id: collectionId, projectId },
+    });
+    if (!collection) throw fail('Target collection does not belong to this project', 404);
+    return { collectionId, requestId: null };
+  }
+
+  if (targetType === 'REQUEST') {
+    if (!requestId) throw fail('requestId is required for REQUEST flow target');
+    if (collectionId) throw fail('collectionId must be null for REQUEST flow target');
+
+    const request = await prisma.apiRequest.findFirst({
+      where: {
+        id: requestId,
+        collection: { projectId },
+      },
+    });
+    if (!request) throw fail('Target request does not belong to this project', 404);
+    return { collectionId: null, requestId };
+  }
 }
-function isDevelopmentLoopback(url) {
-  if (process.env.NODE_ENV === 'production') return false;
-  const hostname = url.hostname.toLowerCase().replace(/\.$/, '');
-  return hostname === 'localhost' || hostname.endsWith('.localhost') || hostname === '127.0.0.1' || hostname === '::1';
+
+/**
+ * Creates a new flow with verified target integrity.
+ */
+async function createFlow(projectId, data = {}) {
+  if (!projectId) throw fail('projectId is required');
+  if (!data.name || !data.name.trim()) throw fail('Flow name is required');
+  if (!Number.isInteger(data.intervalMinutes) || data.intervalMinutes < 1) {
+    throw fail('intervalMinutes must be a positive integer');
+  }
+
+  const validatedTarget = await validateFlowTarget(
+    data.targetType,
+    data.collectionId || null,
+    data.requestId || null,
+    projectId
+  );
+
+  const requestedName = data.name.trim();
+  let name = requestedName;
+  let suffix = 2;
+  while (await prisma.flow.findFirst({ where: { projectId, name }, select: { id: true } })) {
+    name = `${requestedName} (${suffix++})`;
+  }
+
+  return prisma.flow.create({
+    data: {
+      projectId,
+      name,
+      targetType: data.targetType,
+      collectionId: validatedTarget.collectionId,
+      requestId: validatedTarget.requestId,
+      intervalMinutes: data.intervalMinutes,
+      notifyOnError: data.notifyOnError !== false,
+      status: 'ACTIVE',
+    },
+    include: {
+      collection: { select: { id: true, name: true } },
+      request: { select: { id: true, name: true, method: true, path: true } },
+    },
+  });
 }
-async function safeUrl(baseUrl, path) {
-  const url = new URL(path, baseUrl);
-  if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Only HTTP(S) destinations are allowed');
-  const records = await dns.lookup(url.hostname, { all: true });
-  const isLoopback = isDevelopmentLoopback(url);
-  if (!records.length || (!isLoopback && records.some((record) => isPrivateIp(record.address)))) throw new Error('Private network destinations are blocked');
-  return url;
+
+/**
+ * Updates an existing flow.
+ */
+async function updateFlow(flowId, data = {}) {
+  if (!flowId) throw fail('flowId is required');
+
+  const flow = await prisma.flow.findUnique({ where: { id: flowId } });
+  if (!flow) throw fail('Flow not found', 404);
+
+  const updateData = {};
+  if (data.name) updateData.name = data.name.trim();
+  if (data.intervalMinutes && Number.isInteger(data.intervalMinutes) && data.intervalMinutes > 0) {
+    updateData.intervalMinutes = data.intervalMinutes;
+  }
+  if (data.status && ['ACTIVE', 'PAUSED'].includes(data.status)) {
+    updateData.status = data.status;
+  }
+  if (typeof data.notifyOnError === 'boolean') {
+    updateData.notifyOnError = data.notifyOnError;
+  }
+
+  if (data.targetType || data.collectionId !== undefined || data.requestId !== undefined) {
+    const targetType = data.targetType || flow.targetType;
+    const collectionId = data.collectionId !== undefined ? data.collectionId : flow.collectionId;
+    const requestId = data.requestId !== undefined ? data.requestId : flow.requestId;
+
+    const validated = await validateFlowTarget(targetType, collectionId, requestId, flow.projectId);
+    updateData.targetType = targetType;
+    updateData.collectionId = validated.collectionId;
+    updateData.requestId = validated.requestId;
+  }
+
+  return prisma.flow.update({
+    where: { id: flowId },
+    data: updateData,
+    include: {
+      collection: { select: { id: true, name: true } },
+      request: { select: { id: true, name: true, method: true, path: true } },
+    },
+  });
 }
-async function executeRequest(request, baseUrl, flowId = null) {
-  const started = Date.now(); let statusCode; let responseBody; let errorMessage;
-  try {
-    const url = await safeUrl(baseUrl, request.path);
-    const headers = Object.fromEntries((request.headers || []).filter((item) => item.key).map((item) => [item.key, item.value || '']));
-    const response = await fetch(url, { method: request.method, headers, body: ['GET', 'HEAD'].includes(request.method) ? undefined : request.body || undefined, signal: AbortSignal.timeout(15000), redirect: 'error' });
-    statusCode = response.status; responseBody = (await response.text()).slice(0, 10000);
-  } catch (error) { errorMessage = error.message; }
-  const latencyMs = Date.now() - started;
-  await prisma.requestExecution.create({ data: { requestId: request.id, flowId, statusCode, latencyMs, responseBody, errorMessage } });
-  await prisma.apiRequest.update({ where: { id: request.id }, data: { lastStatusCode: statusCode || null } });
-  return { statusCode, latencyMs, responseBody, errorMessage };
+
+/**
+ * Pauses a flow.
+ */
+async function pauseFlow(flowId) {
+  return updateFlow(flowId, { status: 'PAUSED' });
 }
+
+/**
+ * Resumes a flow.
+ */
+async function resumeFlow(flowId) {
+  return updateFlow(flowId, { status: 'ACTIVE' });
+}
+
+/**
+ * Deletes a flow by ID.
+ */
+async function deleteFlow(flowId) {
+  if (!flowId) throw fail('flowId is required');
+  return prisma.flow.delete({ where: { id: flowId } });
+}
+
+/**
+ * Executes a flow and its target requests immediately.
+ */
 async function runFlow(flowId) {
-  const flow = await prisma.flow.findUnique({ where: { id: flowId }, include: { project: { include: { environments: { where: { isDefault: true }, take: 1 } } }, collection: { include: { requests: true } }, request: true } });
+  const flow = await prisma.flow.findUnique({
+    where: { id: flowId },
+    include: {
+      project: {
+        include: {
+          environments: { where: { isDefault: true }, take: 1 },
+        },
+      },
+      collection: {
+        include: { requests: true },
+      },
+      request: true,
+    },
+  });
+
   if (!flow || flow.status !== 'ACTIVE') return null;
-  const baseUrl = flow.project.environments[0]?.baseUrl;
-  if (!baseUrl) throw new Error('The default environment needs a base URL');
-  const requests = flow.targetType === 'REQUEST' ? [flow.request] : flow.collection?.requests || [];
-  const results = await Promise.all(requests.filter(Boolean).map((request) => executeRequest(request, baseUrl, flow.id)));
-  const last = results.at(-1) || {}; const now = new Date();
-  await prisma.flow.update({ where: { id: flow.id }, data: { lastRunAt: now, lastStatusCode: last.statusCode || null, lastLatencyMs: last.latencyMs || null, runsCount: { increment: results.length } } });
+
+  const defaultEnv = flow.project.environments[0] || null;
+  const requests = flow.targetType === 'REQUEST'
+    ? [flow.request]
+    : flow.collection?.requests || [];
+
+  const results = [];
+  for (const req of requests.filter(Boolean)) {
+    const result = await executeRequest(req.id, {
+      environmentId: defaultEnv?.id || null,
+      flowId: flow.id,
+    });
+    results.push(result);
+  }
+
+  const lastResult = results.at(-1) || {};
+  const now = new Date();
+
+  await prisma.flow.update({
+    where: { id: flow.id },
+    data: {
+      lastRunAt: now,
+      lastStatusCode: lastResult.statusCode || null,
+      lastLatencyMs: lastResult.latencyMs || null,
+      runsCount: { increment: results.length },
+    },
+  });
+
   return results;
 }
+
+/**
+ * Runs due scheduled flows periodically.
+ */
 async function runDueFlows() {
-  const flows = await prisma.flow.findMany({ where: { status: 'ACTIVE' }, select: { id: true, intervalMinutes: true, lastRunAt: true } });
+  const flows = await prisma.flow.findMany({
+    where: { status: 'ACTIVE' },
+    select: { id: true, intervalMinutes: true, lastRunAt: true },
+  });
+
   const now = Date.now();
-  await Promise.all(flows.filter((flow) => !flow.lastRunAt || now - flow.lastRunAt.getTime() >= flow.intervalMinutes * 60000).map(async (flow) => { try { await runFlow(flow.id); } catch (error) { console.error(`Flow ${flow.id} failed: ${error.message}`); } }));
+  await Promise.all(
+    flows
+      .filter((flow) => !flow.lastRunAt || now - flow.lastRunAt.getTime() >= flow.intervalMinutes * 60000)
+      .map(async (flow) => {
+        try {
+          await runFlow(flow.id);
+        } catch (err) {
+          console.error(`Flow ${flow.id} execution failed: ${err.message}`);
+        }
+      })
+  );
 }
-function startScheduler() { const timer = setInterval(() => void runDueFlows(), 15000); timer.unref(); void runDueFlows(); return () => clearInterval(timer); }
-module.exports = { runFlow, startScheduler };
+
+function startScheduler() {
+  const timer = setInterval(() => void runDueFlows(), 15000);
+  timer.unref();
+  void runDueFlows();
+  return () => clearInterval(timer);
+}
+
+module.exports = {
+  createFlow,
+  updateFlow,
+  deleteFlow,
+  pauseFlow,
+  resumeFlow,
+  validateFlowTarget,
+  runFlow,
+  startScheduler,
+};

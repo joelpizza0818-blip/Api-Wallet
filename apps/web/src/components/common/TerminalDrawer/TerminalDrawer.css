@@ -25,33 +25,26 @@
   padding: 0 var(--spacing-3);
   background-color: var(--color-surface-alt);
   border-bottom: 1px solid var(--color-border);
-  height: 34px;
+  height: 38px;
 }
 
 .wb-term-tabs {
   display: flex;
-  gap: var(--spacing-2);
+  align-items: center;
+  gap: var(--spacing-3);
 }
 
-.wb-term-tab {
-  background: transparent;
-  border: none;
-  color: var(--color-text-muted);
+.wb-term-title-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 11px;
-  font-weight: var(--font-weight-medium);
-  padding: 8px var(--spacing-3);
-  cursor: pointer;
-  border-bottom: 2px solid transparent;
-}
-
-.wb-term-tab:hover {
   color: var(--color-text);
 }
 
-.wb-term-tab--active {
-  color: var(--color-primary);
-  border-bottom-color: var(--color-primary);
-  font-weight: var(--font-weight-bold);
+.wb-term-count {
+  color: var(--color-text-muted);
+  font-size: 10px;
 }
 
 .wb-term-live-dot {
@@ -60,21 +53,50 @@
   height: 6px;
   border-radius: 50%;
   background-color: #10b981;
-  margin-left: 4px;
 }
 
-.wb-xterm-wrapper {
-  width: 100%;
-  height: 100%;
-  min-height: 180px;
-  background-color: #0c0e14;
-  padding: 4px;
+.wb-term-filter-group {
+  display: flex;
+  align-items: center;
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   overflow: hidden;
 }
 
-.wb-xterm-wrapper .xterm {
-  height: 100%;
+.wb-term-filter-btn {
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: 10px;
+  padding: 3px 8px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.wb-term-filter-btn:hover {
+  color: var(--color-text);
+}
+
+.wb-term-filter-btn.active {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+  font-weight: bold;
+}
+
+.wb-term-search-input {
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  font-size: 11px;
+  padding: 3px 8px;
+  outline: none;
+  width: 140px;
+}
+
+.wb-term-search-input:focus {
+  border-color: var(--color-primary);
 }
 
 .wb-term-actions {
@@ -83,31 +105,13 @@
   gap: var(--spacing-2);
 }
 
-.wb-term-shell-select {
-  background: var(--color-surface-alt);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  color: var(--color-text-muted);
-  font-size: 10px;
-  padding: 2px 6px;
-  cursor: pointer;
-  outline: none;
-  transition: border-color var(--transition-fast), color var(--transition-fast);
-}
-
-.wb-term-shell-select:hover,
-.wb-term-shell-select:focus {
-  border-color: var(--color-primary);
-  color: var(--color-text);
-}
-
 .wb-term-action-btn {
   background: transparent;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   color: var(--color-text-muted);
   font-size: 10px;
-  padding: 2px 8px;
+  padding: 3px 8px;
   cursor: pointer;
 }
 
@@ -136,7 +140,7 @@
   background-color: var(--color-background);
 }
 
-.wb-console-view, .wb-terminal-view {
+.wb-console-view {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -146,6 +150,7 @@
   color: var(--color-text-muted);
   font-size: 12px;
   font-style: italic;
+  padding: 12px 0;
 }
 
 .wb-console-line {
@@ -186,40 +191,4 @@
 
 .wb-console-line--error .wb-console-text {
   color: #ef4444;
-}
-
-.wb-term-line {
-  margin: 0;
-  font-size: 11px;
-  white-space: pre-wrap;
-  word-break: break-all;
-}
-
-.wb-term-line--cmd { color: var(--color-primary); font-weight: bold; }
-.wb-term-line--sys { color: var(--color-text-muted); font-style: italic; }
-.wb-term-line--out { color: var(--color-text); }
-.wb-term-line--err { color: #ef4444; }
-.wb-term-line--info { color: #3b82f6; }
-
-.wb-term-input-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 4px;
-}
-
-.wb-term-prompt {
-  color: var(--color-primary);
-  font-weight: bold;
-  font-size: 11px;
-}
-
-.wb-term-input {
-  flex: 1;
-  background: transparent;
-  border: none;
-  outline: none;
-  color: var(--color-text);
-  font-family: var(--font-family-mono);
-  font-size: 11px;
 }

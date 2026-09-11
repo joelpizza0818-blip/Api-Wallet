@@ -319,6 +319,104 @@
   border: 1px solid var(--color-border);
   color: var(--color-text-muted);
   font-family: var(--font-family-mono);
+  white-space: nowrap;
+}
+
+.wb-search-clear-btn {
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 0 4px;
+  font-size: 11px;
+}
+
+.wb-search-clear-btn:hover {
+  color: var(--color-text);
+}
+
+.wb-topbar__center {
+  position: relative;
+  width: 100%;
+  max-width: 420px;
+}
+
+.wb-search-results-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  max-height: 360px;
+  overflow-y: auto;
+  z-index: 1000;
+  padding: 6px;
+}
+
+.wb-search-no-results {
+  padding: 12px;
+  text-align: center;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.wb-search-group {
+  margin-bottom: 8px;
+}
+
+.wb-search-group-title {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  padding: 4px 8px;
+  letter-spacing: 0.5px;
+}
+
+.wb-search-result-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.wb-search-result-item:hover {
+  background-color: var(--color-surface-alt);
+}
+
+.wb-search-icon {
+  font-size: 13px;
+  width: 18px;
+  text-align: center;
+}
+
+.wb-search-result-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.wb-search-result-primary {
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wb-search-result-secondary {
+  font-size: 10px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Topbar Right */

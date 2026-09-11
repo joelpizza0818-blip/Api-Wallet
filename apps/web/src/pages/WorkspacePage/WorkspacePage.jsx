@@ -189,6 +189,8 @@ function WorkspacePage() {
         isSettingsOpen={isSettingsOpen}
         onToggleSettings={() => setIsSettingsOpen(!isSettingsOpen)}
         onOpenNewWorkspaceModal={() => setIsNewWorkspaceModalOpen(true)}
+        onSelectApi={handleSelectApi}
+        onSelectView={handleSelectView}
       />
 
       {/* Main App Work Area */}

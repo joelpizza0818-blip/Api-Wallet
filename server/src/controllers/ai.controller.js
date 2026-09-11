@@ -13,7 +13,7 @@ async function generateReply(messages) {
 
 async function chat(req, res, next) {
   try {
-    const messages = Array.isArray(req.body.messages) ? req.body.messages.slice(-20) : [];
+    const messages = Array.isArray(req.body?.messages) ? req.body.messages.slice(-20) : [];
     res.json({ reply: await generateReply(messages) });
   } catch (error) { next(error); }
 }

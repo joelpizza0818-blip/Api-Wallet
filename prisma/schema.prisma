@@ -288,6 +288,8 @@ model ApiKey {
   name String
   prefix String
   keyHash String @unique
+  encryptedValue String
+  encryptionKeyVersion Int @default(1)
   lastFourCharacters String
   scopes Json @default("[]")
   status ApiKeyStatus @default(ACTIVE)

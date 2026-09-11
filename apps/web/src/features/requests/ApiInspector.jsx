@@ -1,9 +1,40 @@
 import { useState, useEffect } from 'react';
 import { useWorkspace } from '../workspaces/WorkspaceContext';
+import { useFeedback } from '../../components/common/Feedback/FeedbackContext';
 import './ApiInspector.css';
 
+export function parseCurlCommand(input) {
+  const tokens = [...String(input || '').matchAll(/'([^']*)'|"((?:\\.|[^"\\])*)"|(\S+)/g)].map((m) => (m[1] ?? m[2]?.replace(/\\(["'\\])/g, '$1') ?? m[3]));
+  if (tokens[0]?.toLowerCase() === 'curl') tokens.shift();
+  let parsedMethod = 'GET'; let parsedUrl = ''; let parsedBody = ''; const parsedHeaders = [];
+  for (let i = 0; i < tokens.length; i += 1) {
+    const token = tokens[i];
+    if (['-X', '--request'].includes(token)) parsedMethod = tokens[++i] || parsedMethod;
+    else if (['-H', '--header'].includes(token)) { const value = tokens[++i] || ''; const split = value.indexOf(':'); if (split > 0) parsedHeaders.push({ key: value.slice(0, split).trim(), value: value.slice(split + 1).trim() }); }
+    else if (['-d', '--data', '--data-raw', '--data-binary', '--data-urlencode'].includes(token)) { parsedBody = tokens[++i] || ''; if (parsedMethod === 'GET') parsedMethod = 'POST'; }
+    else if (!token.startsWith('-') && !parsedUrl) parsedUrl = token;
+  }
+  return { method: parsedMethod.toUpperCase(), url: parsedUrl, headers: parsedHeaders, body: parsedBody };
+}
+
+function shellQuote(value) { return `'${String(value).replace(/'/g, "'\\''")}'`; }
+
+export function generateCurl({ method, url, headers = [], body = '' }) {
+  const parts = ['curl', shellQuote(url || '')];
+  if (method && method !== 'GET') parts.push('-X', method);
+  headers.filter((h) => h.key).forEach((h) => parts.push('-H', shellQuote(`${h.key}: ${h.value || ''}`)));
+  if (body && !['GET', 'HEAD'].includes(method)) parts.push('--data-raw', shellQuote(body));
+  return parts.join(' ');
+}
+
+export function generateFetch({ method, url, headers = [], body = '' }) {
+  const headerObject = Object.fromEntries(headers.filter((h) => h.key).map((h) => [h.key, h.value || '']));
+  return `const response = await fetch(${JSON.stringify(url || '')}, {\n  method: ${JSON.stringify(method || 'GET')},\n  headers: ${JSON.stringify(headerObject, null, 2)},${body ? `\n  body: ${JSON.stringify(body)},` : ''}\n});\nconst data = await response.text();`;
+}
+
 function ApiInspector({ api }) {
-  const { updateApi, addConsoleLog } = useWorkspace();
+  const { updateApi, addConsoleLog, apiKeys, addApiKey } = useWorkspace();
+  const { notify } = useFeedback();
   const [method, setMethod] = useState(api.method || 'GET');
   const [url, setUrl] = useState(api.url || api.path || '');
   const [activeTab, setActiveTab] = useState('params');
@@ -23,6 +54,10 @@ function ApiInspector({ api }) {
   const [saveMessage, setSaveMessage] = useState('');
   const [scriptSubTab, setScriptSubTab] = useState('pre'); // 'pre' | 'post'
   const [showSnippets, setShowSnippets] = useState(false);
+  const [showCurl, setShowCurl] = useState(false);
+  const [curlText, setCurlText] = useState('');
+  const [snippetType, setSnippetType] = useState('curl');
+  const [headers, setHeaders] = useState(api.headers || []);
 
   const insertSnippet = (snippetText) => {
     if (scriptSubTab === 'pre') {
@@ -37,6 +72,7 @@ function ApiInspector({ api }) {
     setMethod(api.method || 'GET');
     setUrl(api.url || api.path || '');
     setBodyContent(api.body || '');
+    setHeaders(api.headers || []);
     setResponse(api.responseSample || '');
     setResponseMeta({
       status: api.status || 'Ready',
@@ -62,7 +98,7 @@ function ApiInspector({ api }) {
   };
 
   const saveRequestSettings = async () => {
-    await updateApi(api.id, { authorization, preRequestScript, testScript, body: bodyContent, method, path: url.startsWith('/') ? url : api.path, url, name: api.name });
+    await updateApi(api.id, { authorization, preRequestScript, testScript, headers, body: bodyContent, method, path: url.startsWith('/') ? url : api.path, url, name: api.name });
     setSaveMessage('Guardado');
     setTimeout(() => setSaveMessage(''), 1800);
   };
@@ -73,16 +109,17 @@ function ApiInspector({ api }) {
     try {
       if (!url.trim()) throw new Error('Introduce la URL completa del endpoint.');
       const variables = {};
-      const scriptState = { variables: { set: (key, value) => { variables[key] = String(value); }, get: (key) => variables[key] }, request: { method, url, headers: { add: ({ key, value }) => { if (key) headers[key] = value; } } }, response: null };
-      let headers = Object.fromEntries((api.headers || []).filter((item) => item.key).map((item) => [item.key, item.value || '']));
-      runScript(preRequestScript, { ...scriptState, setNextRequest: () => {} });
+      let requestHeaders = Object.fromEntries(headers.filter((item) => item.key).map((item) => [item.key, item.value || '']));
+      const scriptState = { variables: { set: (key, value) => { variables[key] = String(value); }, get: (key) => variables[key] }, request: { method, url, headers: { add: ({ key, value }) => { if (key) requestHeaders[key] = value; } } }, response: null };
+      runScript(preRequestScript, { ...scriptState, setNextRequest: () => {}, variables: { ...scriptState.variables, replaceIn: (value) => String(value).replace(/\{\{([^}]+)\}\}/g, (_, key) => variables[key] || '') } });
       const query = new URLSearchParams((api.params || []).filter((item) => item.key && item.value).map((item) => [item.key, item.value]));
       const targetUrl = query.toString() ? `${url}${url.includes('?') ? '&' : '?'}${query}` : url;
-      if (authorization.type === 'bearer' && authorization.token) headers.Authorization = `Bearer ${authorization.token}`;
-      if (authorization.type === 'apikey' && authorization.key) headers[authorization.key] = authorization.value || '';
-      if (authorization.type === 'basic' && authorization.username) headers.Authorization = `Basic ${btoa(`${authorization.username}:${authorization.password || ''}`)}`;
-      if (authorization.type === 'oauth2' && authorization.token) headers.Authorization = `Bearer ${authorization.token}`;
-      const result = await fetch(targetUrl, { method, headers, body: !['GET', 'HEAD'].includes(method) && bodyContent ? bodyContent : undefined });
+      if (authorization.type === 'bearer' && authorization.token) requestHeaders.Authorization = `Bearer ${authorization.token}`;
+      if (authorization.type === 'apikey' && authorization.key) requestHeaders[authorization.key] = authorization.value || '';
+      if (authorization.type === 'basic' && authorization.username) requestHeaders.Authorization = `Basic ${btoa(`${authorization.username}:${authorization.password || ''}`)}`;
+      if (authorization.type === 'oauth2' && authorization.token) requestHeaders.Authorization = `Bearer ${authorization.token}`;
+      if (bodyContent && !['GET', 'HEAD'].includes(method) && !Object.keys(requestHeaders).some((key) => key.toLowerCase() === 'content-type')) requestHeaders['Content-Type'] = 'application/json';
+      const result = await fetch(targetUrl, { credentials: 'include', method, headers: requestHeaders, body: !['GET', 'HEAD'].includes(method) && bodyContent ? bodyContent : undefined });
       const text = await result.text();
       let formatted = text;
       if (responseFormat === 'json') { try { formatted = JSON.stringify(JSON.parse(text), null, 2); } catch {} }
@@ -105,7 +142,9 @@ function ApiInspector({ api }) {
         });
       }
       const test = (name, passed) => { if (!passed) throw new Error(name || 'Test failed'); };
-      runScript(testScript, { test, expect: (value, message) => ({ to: { eql: (expected) => { if (value !== expected) throw new Error(message || `Expected ${value} to equal ${expected}`); } } }), response: { status: result.status, code: result.status, body: text, text: () => text } }, 'Post-response Test');
+      const pmTest = (name, callback) => { try { callback(); if (addConsoleLog) addConsoleLog({ type: 'success', text: `[Test OK] ${name}` }); } catch (error) { throw new Error(`${name}: ${error.message}`); } };
+      const pmExpect = (value) => ({ to: { eql: (expected) => { if (value !== expected) throw new Error(`Expected ${value} to equal ${expected}`); }, include: (expected) => { if (!String(value).includes(expected)) throw new Error(`Expected value to include ${expected}`); } } });
+      runScript(testScript, { test, test: pmTest, expect: pmExpect, response: { status: result.status, code: result.status, body: text, text: () => text, json: () => JSON.parse(text) } }, 'Post-response Test');
     } catch (error) {
       if (addConsoleLog) {
         addConsoleLog({
@@ -173,8 +212,11 @@ function ApiInspector({ api }) {
             </>
           )}
         </button>
+        <button type="button" className="wb-copy-btn" onClick={() => setShowCurl(true)}>cURL / JS</button>
         <button type="button" className="wb-copy-btn" onClick={saveRequestSettings}>{saveMessage || 'Guardar'}</button>
       </div>
+
+      {showCurl && <div className="wb-snippets-popover wb-curl-modal"><div className="wb-snippets-popover-header"><span>cURL / JavaScript</span><button type="button" className="wb-snippets-close-btn" onClick={() => setShowCurl(false)}>✕</button></div><textarea className="wb-scripts-textarea" rows={7} value={curlText} onChange={(e) => setCurlText(e.target.value)} placeholder="Pega aquí un comando cURL para importarlo" /><div className="wb-snippets-popover-list"><button type="button" onClick={() => { const parsed = parseCurlCommand(curlText); setMethod(parsed.method); setUrl(parsed.url); setHeaders(parsed.headers); setBodyContent(parsed.body); setShowCurl(false); }}>Importar cURL</button><button type="button" onClick={() => { setSnippetType('curl'); setCurlText(generateCurl({ method, url, headers, body: bodyContent })); }}>Generar cURL</button><button type="button" onClick={() => { setSnippetType('fetch'); setCurlText(generateFetch({ method, url, headers, body: bodyContent })); }}>Generar fetch()</button><button type="button" onClick={() => navigator.clipboard.writeText(curlText)}>Copiar {snippetType}</button></div></div>}
 
       {/* Endpoint Description Info */}
       <div className="wb-endpoint-meta">
@@ -266,9 +308,108 @@ function ApiInspector({ api }) {
                 <option value="oauth2">OAuth 2.0 Bearer</option>
               </select>
             </div>
-            {authorization.type === 'bearer' || authorization.type === 'oauth2' ? <input className="wb-url-input" type="password" placeholder="Token de acceso" value={authorization.token || ''} onChange={(event) => setAuthorization({ ...authorization, token: event.target.value })} /> : null}
-            {authorization.type === 'apikey' ? <div className="wb-auth-fields"><input className="wb-url-input" placeholder="Nombre del header" value={authorization.key || ''} onChange={(event) => setAuthorization({ ...authorization, key: event.target.value })} /><input className="wb-url-input" type="password" placeholder="Valor de la API key" value={authorization.value || ''} onChange={(event) => setAuthorization({ ...authorization, value: event.target.value })} /></div> : null}
-            {authorization.type === 'basic' ? <div className="wb-auth-fields"><input className="wb-url-input" placeholder="Usuario" value={authorization.username || ''} onChange={(event) => setAuthorization({ ...authorization, username: event.target.value })} /><input className="wb-url-input" type="password" placeholder="Contraseña" value={authorization.password || ''} onChange={(event) => setAuthorization({ ...authorization, password: event.target.value })} /></div> : null}
+            {authorization.type === 'bearer' || authorization.type === 'oauth2' ? (
+              <input
+                className="wb-url-input"
+                type="password"
+                placeholder="Token de acceso"
+                value={authorization.token || ''}
+                onChange={(event) => setAuthorization({ ...authorization, token: event.target.value })}
+              />
+            ) : null}
+
+            {authorization.type === 'apikey' ? (
+              <div className="wb-auth-fields-stack">
+                <input
+                  className="wb-url-input"
+                  placeholder="Nombre del header (ej. X-API-Key)"
+                  value={authorization.key || ''}
+                  onChange={(event) => setAuthorization({ ...authorization, key: event.target.value })}
+                />
+
+                {apiKeys && apiKeys.length > 0 && (
+                  <select
+                    className="wb-auth-select"
+                    value={authorization.apiKeyId || ''}
+                    onChange={(e) => {
+                      const chosenId = e.target.value;
+                      const chosen = apiKeys.find((k) => k.id === chosenId);
+                      if (chosen) {
+                        setAuthorization({
+                          ...authorization,
+                          apiKeyId: chosen.id,
+                          value: chosen.key || `${chosen.prefix}_••••${chosen.lastFourCharacters || ''}`,
+                        });
+                      } else {
+                        setAuthorization({
+                          ...authorization,
+                          apiKeyId: '',
+                        });
+                      }
+                    }}
+                  >
+                    <option value="">-- Seleccionar de mis API Keys guardadas --</option>
+                    {apiKeys.map((k) => (
+                      <option key={k.id} value={k.id}>
+                        🔑 {k.name} ({k.prefix || 'sk'}_••••{k.lastFourCharacters || '••••'})
+                      </option>
+                    ))}
+                  </select>
+                )}
+
+                <input
+                  className="wb-url-input"
+                  type="password"
+                  placeholder="Valor de la API key"
+                  value={authorization.value || ''}
+                  onChange={(event) => setAuthorization({ ...authorization, apiKeyId: '', value: event.target.value })}
+                />
+
+                {authorization.value && !authorization.apiKeyId && (
+                  <div className="wb-auth-save-box">
+                    <button
+                      type="button"
+                      className="wb-auth-save-inline-btn"
+                      onClick={async () => {
+                        try {
+                          const created = await addApiKey({
+                            name: `Key para ${api.name || 'Endpoint'}`,
+                            key: authorization.value,
+                            environment: 'Producción',
+                            scope: 'Full Access',
+                          });
+                          setAuthorization({ ...authorization, apiKeyId: created.id });
+                          notify('API Key guardada en la lista de keys del proyecto.');
+                        } catch (err) {
+                          notify(err.message || 'Error al guardar la API Key', 'error');
+                        }
+                      }}
+                    >
+                      💾 Guardar en API Keys del proyecto
+                    </button>
+                    <small className="wb-auth-save-hint">Si no la guardas, se usará únicamente en esta cabecera.</small>
+                  </div>
+                )}
+              </div>
+            ) : null}
+
+            {authorization.type === 'basic' ? (
+              <div className="wb-auth-fields">
+                <input
+                  className="wb-url-input"
+                  placeholder="Usuario"
+                  value={authorization.username || ''}
+                  onChange={(event) => setAuthorization({ ...authorization, username: event.target.value })}
+                />
+                <input
+                  className="wb-url-input"
+                  type="password"
+                  placeholder="Contraseña"
+                  value={authorization.password || ''}
+                  onChange={(event) => setAuthorization({ ...authorization, password: event.target.value })}
+                />
+              </div>
+            ) : null}
             <div className="wb-auth-desc">
               La autorización se guarda en esta request y se aplica al ejecutar la petición.
             </div>
@@ -360,19 +501,24 @@ function ApiInspector({ api }) {
 
         {activeTab === 'headers' && (
           <div className="wb-table-wrap">
+            <div className="wb-headers-toolbar">
+              <button type="button" className="wb-copy-btn" onClick={() => setHeaders((items) => [...items, { key: '', value: '' }])}>+ Agregar header</button>
+            </div>
             <table className="wb-table">
               <thead>
                 <tr>
                   <th>Header</th>
                   <th>Value</th>
+                  <th>Acciones</th>
                 </tr>
               </thead>
               <tbody>
-                {api.headers && api.headers.length > 0 ? (
-                  api.headers.map((h, i) => (
+                {headers && headers.length > 0 ? (
+                  headers.map((h, i) => (
                     <tr key={i}>
-                      <td><code>{h.key}</code></td>
-                      <td><code>{h.value}</code></td>
+                      <td><input className="wb-header-input" value={h.key || ''} placeholder="Authorization" onChange={(event) => setHeaders((items) => items.map((item, index) => index === i ? { ...item, key: event.target.value } : item))} /></td>
+                      <td><input className="wb-header-input" value={h.value || ''} placeholder="Bearer ..." onChange={(event) => setHeaders((items) => items.map((item, index) => index === i ? { ...item, value: event.target.value } : item))} /></td>
+                      <td><button type="button" className="wb-copy-btn" onClick={() => setHeaders((items) => items.filter((_, index) => index !== i))}>Eliminar</button></td>
                     </tr>
                   ))
                 ) : (

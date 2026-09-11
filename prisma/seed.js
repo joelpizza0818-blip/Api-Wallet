@@ -19,7 +19,25 @@ async function main() {
   const charge = await prisma.apiRequest.upsert({ where: { collectionId_name: { collectionId: paymentsCollection.id, name: 'Create Charge' } }, update: {}, create: { collectionId: paymentsCollection.id, name: 'Create Charge', method: 'POST', path: '/api/v1/charges', headers: [{ key: 'Content-Type', value: 'application/json' }], params: [], body: '{"amount":1999,"currency":"mxn"}', responseSample: '{"id":"ch_123","status":"succeeded"}' } });
   const staging = await prisma.environment.upsert({ where: { projectId_slug: { projectId: project.id, slug: 'staging-dev' } }, update: {}, create: { projectId: project.id, name: 'Staging / Dev', slug: 'staging-dev', baseUrl: 'https://staging.api-vault.dev' } });
   await prisma.secret.upsert({ where: { environmentId_name: { environmentId: staging.id, name: 'STRIPE_SECRET_KEY' } }, update: { encryptedValue: encrypt('sk_test_demo_only') }, create: { environmentId: staging.id, name: 'STRIPE_SECRET_KEY', encryptedValue: encrypt('sk_test_demo_only') } });
-  const keySeed = async (name, prefix) => { const raw = `${prefix}_${crypto.createHash('sha256').update(name).digest('hex').slice(0, 48)}`; return prisma.apiKey.upsert({ where: { keyHash: crypto.createHash('sha256').update(raw).digest('hex') }, update: {}, create: { projectId: project.id, name, prefix, keyHash: crypto.createHash('sha256').update(raw).digest('hex'), lastFourCharacters: raw.slice(-4), scopes: ['read'], createdById: user.id } }); };
+  const keySeed = async (name, prefix) => {
+    const raw = `${prefix}_${crypto.createHash('sha256').update(name).digest('hex').slice(0, 48)}`;
+    const keyHash = crypto.createHash('sha256').update(raw).digest('hex');
+    return prisma.apiKey.upsert({
+      where: { keyHash },
+      update: { encryptedValue: encrypt(raw), encryptionKeyVersion: 1 },
+      create: {
+        projectId: project.id,
+        name,
+        prefix,
+        keyHash,
+        encryptedValue: encrypt(raw),
+        encryptionKeyVersion: 1,
+        lastFourCharacters: raw.slice(-4),
+        scopes: ['read'],
+        createdById: user.id,
+      },
+    });
+  };
   await keySeed('Production integration', 'sk_live');
   await keySeed('Staging QA', 'sk_test');
   const flow = await prisma.flow.upsert({ where: { projectId_name: { projectId: project.id, name: 'Health check API' } }, update: {}, create: { projectId: project.id, name: 'Health check API', targetType: 'REQUEST', requestId: login.id, intervalMinutes: 15, notifyOnError: true } });

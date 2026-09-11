@@ -5,27 +5,88 @@ import UserProfileBubble from '../../components/common/UserProfileBubble/UserPro
 import { useWorkspace } from './WorkspaceContext';
 import './TopBar.css';
 
-function TopBar({ onToggleSettings, isSettingsOpen, onOpenNewWorkspaceModal }) {
+function TopBar({ onToggleSettings, isSettingsOpen, onOpenNewWorkspaceModal, onSelectApi, onSelectView }) {
   const navigate = useNavigate();
-  const { workspaceName, workspaces, activeWorkspaceId, switchWorkspace } = useWorkspace();
+  const { workspaceName, workspaces, activeWorkspaceId, switchWorkspace, collections, apiKeys, flows, environments } = useWorkspace();
   const [isWsMenuOpen, setIsWsMenuOpen] = useState(false);
   const [wsSearch, setWsSearch] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const wsDropdownRef = useRef(null);
+  const searchContainerRef = useRef(null);
+  const searchInputRef = useRef(null);
 
-  // Close dropdown on click outside
+  // Close dropdowns on click outside
   useEffect(() => {
     function handleClickOutside(event) {
       if (wsDropdownRef.current && !wsDropdownRef.current.contains(event.target)) {
         setIsWsMenuOpen(false);
+      }
+      if (searchContainerRef.current && !searchContainerRef.current.contains(event.target)) {
+        setIsSearchOpen(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Global Ctrl+K shortcut to focus search
+  useEffect(() => {
+    function handleKeyDown(e) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        setIsSearchOpen(true);
+      }
+      if (e.key === 'Escape') {
+        setIsSearchOpen(false);
+        setIsWsMenuOpen(false);
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   const filteredWorkspaces = (workspaces || []).filter((w) =>
     w.name.toLowerCase().includes(wsSearch.toLowerCase())
   );
+
+  // Search across APIs, Collections, Keys, Flows, Environments
+  const q = searchQuery.trim().toLowerCase();
+  const matchedApis = q
+    ? (collections || []).flatMap((c) =>
+        (c.apis || [])
+          .filter(
+            (api) =>
+              api.name.toLowerCase().includes(q) ||
+              api.path.toLowerCase().includes(q) ||
+              api.method?.toLowerCase().includes(q)
+          )
+          .map((api) => ({ ...api, collectionName: c.name }))
+      )
+    : [];
+
+  const matchedCollections = q
+    ? (collections || []).filter(
+        (c) => c.name.toLowerCase().includes(q) || c.description?.toLowerCase().includes(q)
+      )
+    : [];
+
+  const matchedKeys = q
+    ? (apiKeys || []).filter(
+        (k) => k.name.toLowerCase().includes(q) || k.prefix?.toLowerCase().includes(q)
+      )
+    : [];
+
+  const matchedFlows = q
+    ? (flows || []).filter((f) => f.name.toLowerCase().includes(q))
+    : [];
+
+  const hasSearchResults =
+    matchedApis.length > 0 ||
+    matchedCollections.length > 0 ||
+    matchedKeys.length > 0 ||
+    matchedFlows.length > 0;
 
   return (
     <header className="wb-topbar">
@@ -157,20 +218,146 @@ function TopBar({ onToggleSettings, isSettingsOpen, onOpenNewWorkspaceModal }) {
         </div>
       </div>
 
-      {/* Global Search */}
-      <div className="wb-topbar__center">
+      {/* Global Search with Live Search Dropdown */}
+      <div className="wb-topbar__center" ref={searchContainerRef}>
         <div className="wb-search-bar">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="11" cy="11" r="8" />
             <line x1="21" y1="21" x2="16.65" y2="16.65" />
           </svg>
           <input
+            ref={searchInputRef}
             type="text"
             placeholder="Buscar APIs, colecciones o API Keys..."
-            aria-label="Buscar en API-Wallet"
+            aria-label="Buscar en API-Vault"
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setIsSearchOpen(true);
+            }}
+            onFocus={() => setIsSearchOpen(true)}
           />
-          <span className="wb-search-shortcut">Ctrl K</span>
+          {searchQuery ? (
+            <button
+              type="button"
+              className="wb-search-clear-btn"
+              onClick={() => {
+                setSearchQuery('');
+                setIsSearchOpen(false);
+              }}
+              title="Limpiar búsqueda"
+            >
+              ✕
+            </button>
+          ) : (
+            <span className="wb-search-shortcut">Ctrl K</span>
+          )}
         </div>
+
+        {/* Live Search Results Dropdown */}
+        {isSearchOpen && searchQuery && (
+          <div className="wb-search-results-dropdown">
+            {!hasSearchResults ? (
+              <div className="wb-search-no-results">No se encontraron resultados para "{searchQuery}"</div>
+            ) : (
+              <>
+                {matchedApis.length > 0 && (
+                  <div className="wb-search-group">
+                    <div className="wb-search-group-title">Endpoints &amp; Requests ({matchedApis.length})</div>
+                    {matchedApis.map((api) => (
+                      <div
+                        key={api.id}
+                        className="wb-search-result-item"
+                        onClick={() => {
+                          if (onSelectApi) onSelectApi(api);
+                          setIsSearchOpen(false);
+                          setSearchQuery('');
+                        }}
+                      >
+                        <span className={`wb-method-badge tag--${api.method?.toLowerCase() || 'get'}`}>
+                          {api.method || 'GET'}
+                        </span>
+                        <div className="wb-search-result-text">
+                          <span className="wb-search-result-primary">{api.name}</span>
+                          <span className="wb-search-result-secondary">{api.path} · {api.collectionName}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {matchedCollections.length > 0 && (
+                  <div className="wb-search-group">
+                    <div className="wb-search-group-title">Colecciones ({matchedCollections.length})</div>
+                    {matchedCollections.map((col) => (
+                      <div
+                        key={col.id}
+                        className="wb-search-result-item"
+                        onClick={() => {
+                          if (onSelectView) onSelectView('overview');
+                          setIsSearchOpen(false);
+                          setSearchQuery('');
+                        }}
+                      >
+                        <span className="wb-search-icon">📁</span>
+                        <div className="wb-search-result-text">
+                          <span className="wb-search-result-primary">{col.name}</span>
+                          <span className="wb-search-result-secondary">{(col.apis || []).length} requests</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {matchedKeys.length > 0 && (
+                  <div className="wb-search-group">
+                    <div className="wb-search-group-title">API Keys ({matchedKeys.length})</div>
+                    {matchedKeys.map((k) => (
+                      <div
+                        key={k.id}
+                        className="wb-search-result-item"
+                        onClick={() => {
+                          if (onSelectView) onSelectView('apikeys');
+                          setIsSearchOpen(false);
+                          setSearchQuery('');
+                        }}
+                      >
+                        <span className="wb-search-icon">🔑</span>
+                        <div className="wb-search-result-text">
+                          <span className="wb-search-result-primary">{k.name}</span>
+                          <span className="wb-search-result-secondary">{k.prefix}_••••{k.lastFourCharacters || '••••'}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {matchedFlows.length > 0 && (
+                  <div className="wb-search-group">
+                    <div className="wb-search-group-title">Flows ({matchedFlows.length})</div>
+                    {matchedFlows.map((f) => (
+                      <div
+                        key={f.id}
+                        className="wb-search-result-item"
+                        onClick={() => {
+                          if (onSelectView) onSelectView('flows');
+                          setIsSearchOpen(false);
+                          setSearchQuery('');
+                        }}
+                      >
+                        <span className="wb-search-icon">⚡</span>
+                        <div className="wb-search-result-text">
+                          <span className="wb-search-result-primary">{f.name}</span>
+                          <span className="wb-search-result-secondary">Cada {f.intervalMinutes} min</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Topbar Right actions */}
