@@ -101,6 +101,14 @@ const FEATURES = [
   },
 ];
 
+const GUIDE_SHOTS = [
+  { title: 'Dashboard', description: 'Estadísticas y actividad del workspace.', image: '/guide/02-dashboard.png' },
+  { title: 'Invitaciones', description: 'Invita colaboradores y gestiona roles.', image: '/guide/03-invitations.png' },
+  { title: 'Configuración', description: 'Ajusta preferencias y seguridad.', image: '/guide/03-settings.png' },
+  { title: 'Workspace', description: 'Organiza colecciones, requests y entornos.', image: '/guide/03-workspace.png' },
+  { title: 'API Keys', description: 'Administra credenciales del proyecto.', image: '/guide/03-apikeys.png' },
+];
+
 function LandingPage() {
   const { isAuthenticated, logout } = useAuth();
 
@@ -185,6 +193,21 @@ function LandingPage() {
                 <h3 className="landing__feature-title">{feature.title}</h3>
                 <p className="landing__feature-description">{feature.description}</p>
               </Card>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="landing__guide">
+        <div className="container">
+          <h2 className="landing__section-title">Conoce el workspace</h2>
+          <p className="landing__section-subtitle">Una guía visual rápida de las áreas principales de API-Wallet.</p>
+          <div className="landing__guide-grid">
+            {GUIDE_SHOTS.map((shot) => (
+              <article className="landing__guide-card" key={shot.title}>
+                <div className="landing__guide-image-wrap"><img src={shot.image} alt={`Vista de ${shot.title}`} loading="lazy" /></div>
+                <div className="landing__guide-copy"><h3>{shot.title}</h3><p>{shot.description}</p></div>
+              </article>
             ))}
           </div>
         </div>
