@@ -1,7 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
-const session = require('express-session');
+const cookieSession = require('cookie-session');
 const passport = require('passport');
 const routes = require('./routes');
 const { serveMock } = require('./controllers/mock-public.controller');
@@ -36,7 +36,15 @@ app.get('/health', async (_req, res) => {
   }
 });
 app.use('/api', apiRateLimit);
-app.use(session({ secret: process.env.SESSION_SECRET || process.env.JWT_SECRET, resave: false, saveUninitialized: false, cookie: { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', maxAge: 600000 } }));
+const sessionSecret = process.env.SESSION_SECRET || process.env.JWT_SECRET;
+app.use(cookieSession({
+  name: 'oauth_session',
+  keys: [sessionSecret],
+  httpOnly: true,
+  sameSite: 'lax',
+  secure: process.env.NODE_ENV === 'production',
+  maxAge: 600000,
+}));
 app.use(passport.initialize());
 app.get('/health', (_req, res) => res.json({ success: true, status: 'ok', service: 'api-wallet' }));
 app.use('/mock/:mockId', serveMock);
