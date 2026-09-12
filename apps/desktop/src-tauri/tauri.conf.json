@@ -34,5 +34,13 @@
       "icons/128x128.png",
       "icons/logo.svg"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDg5MThEMTFENzY4NDZEQzgKUldUSWJZUjJIZEVZaVh5ckZvbkcxaDl1dUExZHZvN3VQanBZTHJBQVQ4WDk3a3d5UjBickRDUmEK",
+      "endpoints": [
+        "https://github.com/joelpizza0818-blip/Api-Wallet/releases/latest/download/latest.json"
+      ]
+    }
   }
 }
