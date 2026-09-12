@@ -155,6 +155,14 @@
   flex-wrap: wrap;
 }
 
+.landing__desktop-note {
+  max-width: 620px;
+  margin: var(--spacing-5) auto 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-relaxed);
+}
+
 /* ── Features ───────────────────────────────────────────── */
 .landing__features {
   padding-block: var(--spacing-20);

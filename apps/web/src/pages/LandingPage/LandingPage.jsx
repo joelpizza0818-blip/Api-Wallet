@@ -180,11 +180,20 @@ function LandingPage() {
                 <button className="btn btn--ghost btn--lg" onClick={logout} type="button">
                   Cerrar sesión
                 </button>
+                <a className="btn btn--secondary btn--lg" href="/downloads/api-wallet-windows-setup.exe" download>
+                  Descargar para Windows
+                </a>
               </>
             ) : (
-              <Link className="btn btn--primary btn--lg" to="/register">Comenzar</Link>
+              <>
+                <Link className="btn btn--primary btn--lg" to="/register">Comenzar</Link>
+                <a className="btn btn--secondary btn--lg" href="/downloads/api-wallet-windows-setup.exe" download>
+                  Descargar para Windows
+                </a>
+              </>
             )}
           </div>
+          <p className="landing__desktop-note">La aplicación de escritorio instala API-Wallet en Windows para abrir tu workspace como una app nativa, sin depender de una pestaña del navegador.</p>
         </div>
       </section>
 
