@@ -1,9 +1,20 @@
 const { publicUser, createToken, registerLocal, requestLoginVerification, verifyLoginToken, updateProfile: updateProfileService, changePassword: changePasswordService } = require('../services/auth.service');
 const { recordAuthAudit } = require('../services/auth-audit.service');
 
+function sessionCookieOptions() {
+  const isProduction = process.env.NODE_ENV === 'production';
+  return {
+    httpOnly: true,
+    sameSite: isProduction ? 'none' : 'lax',
+    secure: isProduction,
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+    path: '/',
+  };
+}
+
 function setSessionCookie(res, user) {
   const token = createToken(user);
-  res.cookie('api_vault_token', token, { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', maxAge: 7 * 24 * 60 * 60 * 1000, path: '/' });
+  res.cookie('api_vault_token', token, sessionCookieOptions());
 }
 function sendSession(res, user, status = 200) {
   setSessionCookie(res, user);
@@ -36,8 +47,8 @@ function currentUser(req, res) {
 }
 
 function logout(_req, res) {
-  res.clearCookie('api_vault_token', { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', path: '/' });
+  res.clearCookie('api_vault_token', sessionCookieOptions());
   return res.status(204).end();
 }
 
-module.exports = { currentUser, logout, register, login, verifyLogin, updateProfile, changePassword };
+module.exports = { currentUser, logout, register, login, verifyLogin, updateProfile, changePassword, sessionCookieOptions };

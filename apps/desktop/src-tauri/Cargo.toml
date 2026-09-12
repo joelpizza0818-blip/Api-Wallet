@@ -1,0 +1,16 @@
+[package]
+name = "api_wallet_desktop"
+version = "0.1.0"
+description = "Desktop client for API Wallet"
+authors = ["API Wallet"]
+edition = "2021"
+
+[lib]
+name = "api_wallet_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }

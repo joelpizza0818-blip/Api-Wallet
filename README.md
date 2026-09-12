@@ -109,6 +109,18 @@ npm run dev:frontend
 
 URLs locales: frontend `http://localhost:5173`, backend `http://localhost:3000` y health check `http://localhost:3000/health`.
 
+### Aplicación desktop
+
+La aplicación desktop está en `apps/desktop` y reutiliza el frontend de `apps/web` mediante Tauri. El backend continúa siendo el mismo servicio Express.
+
+```bash
+npm install --prefix apps/desktop
+npm run dev:desktop
+npm run build:desktop
+```
+
+Para compilar en Windows necesitas Rust y Visual Studio Build Tools con el workload **Desktop development with C++**. Antes de generar el instalador, configura `VITE_API_URL` en `apps/web/.env` con la URL de producción del backend.
+
 ## Despliegue
 
 ### Frontend en Vercel
