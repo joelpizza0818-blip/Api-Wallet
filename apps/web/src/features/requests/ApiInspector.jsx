@@ -88,7 +88,18 @@ function ApiInspector({ api }) {
   const runScript = (source, pm, scriptName = 'Script') => {
     if (!source.trim()) return;
     try {
-      new Function('pm', source)(pm);
+      // Scripts are user-editable data. Never execute them as page JavaScript:
+      // arbitrary code could issue credentialed requests from this origin.
+      const statements = source.split(';').map((statement) => statement.trim()).filter(Boolean);
+      statements.forEach((statement) => {
+        let match = statement.match(/^pm\.variables\.set\(\s*(['"])([^'"\\]+)\1\s*,\s*(['"])([^'"\\]*)\3\s*\)$/);
+        if (match && pm.variables?.set) { pm.variables.set(match[2], match[4]); return; }
+        match = statement.match(/^pm\.request\.headers\.add\(\s*\{\s*key:\s*(['"])([^'"\\]+)\1\s*,\s*value:\s*(['"])([^'"\\]*)\3\s*\}\s*\)$/);
+        if (match && pm.request?.headers?.add) { pm.request.headers.add({ key: match[2], value: match[4] }); return; }
+        match = statement.match(/^pm\.expect\(pm\.response\.(status|code)\)\.to\.eql\(\s*(\d+)\s*\)$/);
+        if (match && pm.expect && pm.response) { pm.expect(pm.response[match[1]]).to.eql(Number(match[2])); return; }
+        throw new Error('Operación de script no permitida');
+      });
       if (addConsoleLog) addConsoleLog({ type: 'script', text: `[Script OK] ${scriptName} ejecutado correctamente.` });
     } catch (error) {
       if (addConsoleLog) addConsoleLog({ type: 'error', text: `[Script Error] ${scriptName}: ${error.message}` });
