@@ -35,7 +35,7 @@ function AuthPage({ mode }) {
     const password = formData.get('password');
     try {
       const result = isRegister ? await register({ name, email, password }) : await login({ email, password });
-      if (!isRegister && result?.verificationRequired) {
+      if (isRegister && result?.verificationRequired) {
         setVerificationMessage(result.message);
         return;
       }

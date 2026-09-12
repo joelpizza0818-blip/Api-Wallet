@@ -2,7 +2,7 @@ const express = require('express');
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const GithubStrategy = require('passport-github2').Strategy;
-const { currentUser, logout, register, login, verifyLogin, updateProfile, changePassword } = require('../controllers/auth.controller');
+const { currentUser, logout, register, login, verifyEmail, updateProfile, changePassword } = require('../controllers/auth.controller');
 const { createToken, findOrCreateGoogleUser, findOrCreateGithubUser } = require('../services/auth.service');
 const { requireAuth } = require('../middleware/auth.middleware');
 const { authRateLimit, loginRateLimit } = require('../middleware/rate-limit.middleware');
@@ -28,7 +28,7 @@ function redirectWithSession(req, res, destination = '/auth/callback') {
 
 router.post('/register', authRateLimit, register);
 router.post('/login', loginRateLimit, login);
-router.get('/verify-login', verifyLogin);
+router.get('/verify-email', verifyEmail);
 
 function hasGoogleConfiguration() {
   const clientId = process.env.GOOGLE_CLIENT_ID || '';

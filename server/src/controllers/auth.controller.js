@@ -1,4 +1,4 @@
-const { publicUser, createToken, registerLocal, requestLoginVerification, verifyLoginToken, updateProfile: updateProfileService, changePassword: changePasswordService } = require('../services/auth.service');
+const { publicUser, createToken, registerLocal, loginLocal, requestEmailVerification, verifyEmailToken, updateProfile: updateProfileService, changePassword: changePasswordService } = require('../services/auth.service');
 const { recordAuthAudit } = require('../services/auth-audit.service');
 
 function sessionCookieOptions() {
@@ -20,21 +20,28 @@ function sendSession(res, user, status = 200) {
   setSessionCookie(res, user);
   return res.status(status).json({ success: true, user: publicUser(user) });
 }
-async function register(req, res, next) { try { return sendSession(res, await registerLocal(req.body), 201); } catch (error) { return next(error); } }
+async function register(req, res, next) {
+  try {
+    const user = await registerLocal(req.body);
+    await requestEmailVerification(user);
+    await recordAuthAudit({ userId: user.id, email: user.email, event: 'EMAIL_VERIFICATION_SENT', req });
+    return res.status(202).json({ success: true, verificationRequired: true, message: 'Revisa tu correo para confirmar tu cuenta.' });
+  } catch (error) { return next(error); }
+}
 async function login(req, res, next) {
   try {
-    const result = await requestLoginVerification(req.body);
-    await recordAuthAudit({ userId: result.user.id, email: result.user.email, event: 'LOGIN_VERIFICATION_SENT', req });
-    return res.status(202).json({ success: true, verificationRequired: true, message: 'Revisa tu correo para confirmar el inicio de sesión.' });
+    const user = await loginLocal(req.body);
+    await recordAuthAudit({ userId: user.id, email: user.email, event: 'LOGIN_SUCCESS', req });
+    return sendSession(res, user);
   } catch (error) {
     await recordAuthAudit({ email: typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : null, event: 'LOGIN_FAILED', req });
     return next(error);
   }
 }
-async function verifyLogin(req, res, next) {
+async function verifyEmail(req, res, next) {
   try {
-    const user = await verifyLoginToken(req.query.token);
-    await recordAuthAudit({ userId: user.id, email: user.email, event: 'LOGIN_VERIFIED', req });
+    const user = await verifyEmailToken(req.query.token);
+    await recordAuthAudit({ userId: user.id, email: user.email, event: 'EMAIL_VERIFIED', req });
     setSessionCookie(res, user);
     return res.redirect(`${(process.env.FRONTEND_URL || '').replace(/\/+$/, '')}/dashboard`);
   } catch (error) { return next(error); }
@@ -51,4 +58,4 @@ function logout(_req, res) {
   return res.status(204).end();
 }
 
-module.exports = { currentUser, logout, register, login, verifyLogin, updateProfile, changePassword, sessionCookieOptions };
+module.exports = { currentUser, logout, register, login, verifyEmail, updateProfile, changePassword, sessionCookieOptions };
