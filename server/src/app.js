@@ -27,6 +27,9 @@ const localFrontendOrigins = [
   'http://localhost:5174',
   'http://localhost:5175',
   'http://localhost:5176',
+  'http://tauri.localhost',
+  'https://tauri.localhost',
+  'tauri://localhost',
 ].filter(Boolean);
 const stateChangingMethods = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 app.use((req, res, next) => {
