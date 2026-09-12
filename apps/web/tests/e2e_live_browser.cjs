@@ -17,12 +17,15 @@ async function waitFor(url, timeoutMs = 30000) {
 
 async function ensureDevServers(log) {
   const children = [];
+  const startNpm = (args, cwd) => process.platform === 'win32'
+    ? spawn('powershell.exe', ['-NoProfile', '-Command', `npm.cmd ${args.join(' ')}`], { cwd, shell: false, stdio: 'ignore' })
+    : spawn('npm', args, { cwd, shell: false, stdio: 'ignore' });
   if (!(await waitFor('http://localhost:3000/health', 1500))) {
-    const server = spawn('npm', ['run', 'dev'], { cwd: path.resolve(__dirname, '../../server'), shell: true, stdio: 'ignore' });
+    const server = startNpm(['run', 'dev'], path.resolve(__dirname, '../../server'));
     children.push(server); log('🚀 Started backend dev server.');
   }
   if (!(await waitFor('http://localhost:5173/login', 1500))) {
-    const web = spawn('npm', ['run', 'dev', '--', '--host', '127.0.0.1'], { cwd: path.resolve(__dirname, '..'), shell: true, stdio: 'ignore' });
+    const web = startNpm(['run', 'dev', '--', '--host', '127.0.0.1'], path.resolve(__dirname, '..'));
     children.push(web); log('🚀 Started frontend dev server.');
   }
   if (!(await waitFor('http://localhost:3000/health') && await waitFor('http://localhost:5173/login'))) throw new Error('Dev servers did not become ready.');
@@ -85,6 +88,10 @@ async function runE2ETests() {
     if (!page.url().includes('/app')) {
       await page.goto('http://localhost:5173/app', { waitUntil: 'networkidle', timeout: 15000 });
       await page.waitForTimeout(2000);
+    }
+
+    if (!page.url().includes('/app')) {
+      throw new Error('Authentication did not establish a workspace session. The current local-login flow requires email verification before workspace tests can run.');
     }
 
     addLog('✅ Workspace Application loaded at: ' + page.url());
