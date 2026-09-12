@@ -96,8 +96,36 @@ model User {
   notifications Notification[]
   aiChats AiChat[]
   preferences UserPreference?
+  loginChallenges EmailLoginChallenge[]
+  authAuditEvents AuthAuditEvent[]
   @@index([status])
   @@map("users")
+}
+
+model EmailLoginChallenge {
+  id String @id @default(cuid())
+  userId String
+  tokenHash String @unique
+  expiresAt DateTime
+  consumedAt DateTime?
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, expiresAt])
+  @@map("email_login_challenges")
+}
+
+model AuthAuditEvent {
+  id String @id @default(cuid())
+  userId String?
+  email String?
+  event String
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  @@index([email, createdAt])
+  @@index([userId, createdAt])
+  @@map("auth_audit_events")
 }
 
 model UserPreference {

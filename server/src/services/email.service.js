@@ -190,5 +190,25 @@ async function sendWorkspaceInvitation({ email, workspaceName, role, token }) {
   return { delivered: true };
 }
 
-module.exports = { sendWorkspaceInvitation };
+async function sendLoginVerificationEmail({ email, name, token }) {
+  const verifyUrl = `${process.env.API_URL || `http://localhost:${process.env.PORT || 3000}`}/api/auth/verify-login?token=${encodeURIComponent(token)}`;
+  const mailer = transporter();
+  if (!mailer) {
+    if (process.env.NODE_ENV === 'production') throw Object.assign(new Error('Email delivery is not configured'), { statusCode: 503 });
+    console.info(`Development login verification for ${email}: ${verifyUrl}`);
+    return { delivered: false, previewUrl: verifyUrl };
+  }
+
+  const greeting = name || email.split('@')[0];
+  await mailer.sendMail({
+    from: process.env.MAIL_FROM,
+    to: email,
+    subject: 'Confirma tu inicio de sesión en API-Wallet',
+    text: `Hola ${greeting},\n\nConfirma tu identidad para iniciar sesión en API-Wallet abriendo este enlace:\n${verifyUrl}\n\nEl enlace expira en 10 minutos y solo puede usarse una vez.`,
+    html: `<p>Hola ${greeting},</p><p>Confirma tu identidad para iniciar sesión en API-Wallet:</p><p><a href="${verifyUrl}">Confirmar inicio de sesión</a></p><p>El enlace expira en 10 minutos y solo puede usarse una vez.</p>`,
+  });
+  return { delivered: true };
+}
+
+module.exports = { sendWorkspaceInvitation, sendLoginVerificationEmail };
 

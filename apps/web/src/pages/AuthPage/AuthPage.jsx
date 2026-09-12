@@ -1,4 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
 import { LogoIcon } from '../../components/common/Logo/Logo';
 import { useAuth } from '../../features/auth/AuthContext';
 import { useFeedback } from '../../components/common/Feedback/FeedbackContext';
@@ -21,6 +22,7 @@ function AuthPage({ mode }) {
   const title = isRegister ? 'Crea tu cuenta' : 'Bienvenido de nuevo';
   const subtitle = isRegister ? 'Organiza tus APIs y credenciales desde un solo lugar.' : 'Inicia sesión para continuar con API-Wallet.';
   const { login, register, continueWithGoogle, continueWithGithub } = useAuth();
+  const [verificationMessage, setVerificationMessage] = useState('');
   const navigate = useNavigate();
   const location = useLocation();
   const { notify } = useFeedback();
@@ -32,8 +34,11 @@ function AuthPage({ mode }) {
     const name = formData.get('name');
     const password = formData.get('password');
     try {
-      if (isRegister) await register({ name, email, password });
-      else await login({ email, password });
+      const result = isRegister ? await register({ name, email, password }) : await login({ email, password });
+      if (!isRegister && result?.verificationRequired) {
+        setVerificationMessage(result.message);
+        return;
+      }
       const inviteToken = new URLSearchParams(location.search).get('invite');
       navigate(inviteToken ? `/invitations/accept?token=${encodeURIComponent(inviteToken)}` : '/dashboard');
     } catch (error) { notify(error.message, 'error'); }
@@ -60,11 +65,12 @@ function AuthPage({ mode }) {
             <label>Contraseña<input type="password" name="password" autoComplete={isRegister ? 'new-password' : 'current-password'} placeholder="••••••••" required /></label>
             <button className="btn btn--primary btn--md" type="submit">{isRegister ? 'Crear cuenta' : 'Iniciar sesión'}</button>
           </form>
-          <>
+          {verificationMessage && <p role="status">{verificationMessage}</p>}
+          {!window.__TAURI_INTERNALS__ && window.location.protocol !== 'tauri:' && window.location.hostname !== 'tauri.local' && <>
             <div className="auth-divider"><span>o</span></div>
             <button className="auth-google-button" type="button" onClick={() => continueWithGoogle().catch((error) => notify(error.message, 'error'))}><GoogleIcon />Continuar con Google</button>
             <button className="auth-google-button" type="button" onClick={() => continueWithGithub().catch((error) => notify(error.message, 'error'))}><GithubIcon />Continuar con GitHub</button>
-          </>
+          </>}
           {isRegister ? (
             <div className="auth-card__create-account">
               <p>¿Ya tienes una cuenta?</p>

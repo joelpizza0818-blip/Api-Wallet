@@ -12,6 +12,7 @@ export function AuthProvider({ children }) {
     const response = await fetch(`${API_URL}/api/auth/${endpoint}`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     const result = await response.json();
     if (!response.ok) throw new Error(result.message || 'Authentication failed');
+    if (result.verificationRequired) return result;
     setUser(result.user); setIsAuthenticated(true); return result.user;
   };
   const login = ({ email, password }) => authenticate('login', { email, password });

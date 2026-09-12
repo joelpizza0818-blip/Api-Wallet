@@ -1,6 +1,8 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const prisma = require('../config/database');
+const { sendLoginVerificationEmail } = require('./email.service');
 
 function createToken(user) {
   return jwt.sign({ sub: user.id, email: user.email }, process.env.JWT_SECRET, { expiresIn: '7d' });
@@ -71,6 +73,32 @@ async function loginLocal({ email, password }) {
   return user;
 }
 
+async function requestLoginVerification({ email, password }) {
+  const user = await loginLocal({ email, password });
+  const token = crypto.randomBytes(32).toString('hex');
+  await prisma.emailLoginChallenge.deleteMany({ where: { userId: user.id } });
+  await prisma.emailLoginChallenge.create({
+    data: { userId: user.id, tokenHash: crypto.createHash('sha256').update(token).digest('hex'), expiresAt: new Date(Date.now() + 10 * 60 * 1000) },
+  });
+  try {
+    const delivery = await sendLoginVerificationEmail({ email: user.email, name: user.name, token });
+    return { user, delivery };
+  } catch (error) {
+    await prisma.emailLoginChallenge.deleteMany({ where: { userId: user.id } });
+    throw error;
+  }
+}
+
+async function verifyLoginToken(token) {
+  if (typeof token !== 'string' || token.length !== 64) { const error = new Error('Invalid or expired login verification link.'); error.statusCode = 401; throw error; }
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  const challenge = await prisma.emailLoginChallenge.findFirst({ where: { tokenHash, expiresAt: { gt: new Date() }, consumedAt: null }, include: { user: true } });
+  if (!challenge || challenge.user.status !== 'ACTIVE') { const error = new Error('Invalid or expired login verification link.'); error.statusCode = 401; throw error; }
+  const consumed = await prisma.emailLoginChallenge.updateMany({ where: { id: challenge.id, consumedAt: null }, data: { consumedAt: new Date() } });
+  if (consumed.count !== 1) { const error = new Error('Invalid or expired login verification link.'); error.statusCode = 401; throw error; }
+  return challenge.user;
+}
+
 async function updateProfile(userId, { name, avatarUrl }) {
   if (!name?.trim()) { const error = new Error('Name is required.'); error.statusCode = 400; throw error; }
   return prisma.user.update({ where: { id: userId }, data: { name: name.trim(), ...(avatarUrl !== undefined && { avatarUrl: avatarUrl || null }) } });
@@ -83,4 +111,4 @@ async function changePassword(userId, { currentPassword, newPassword }) {
   return prisma.user.update({ where: { id: userId }, data: { passwordHash: await bcrypt.hash(newPassword, 12) } });
 }
 
-module.exports = { createToken, findOrCreateGoogleUser, findOrCreateGithubUser, publicUser, registerLocal, loginLocal, updateProfile, changePassword };
+module.exports = { createToken, findOrCreateGoogleUser, findOrCreateGithubUser, publicUser, registerLocal, loginLocal, requestLoginVerification, verifyLoginToken, updateProfile, changePassword };
