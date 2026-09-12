@@ -9,6 +9,7 @@ import InvitationAcceptPage from '../pages/InvitationAcceptPage';
 import { AuthProvider, useAuth } from '../features/auth/AuthContext';
 import { WorkspaceProvider } from '../features/workspaces/WorkspaceContext';
 import { FeedbackProvider } from '../components/common/Feedback/FeedbackContext';
+import ErrorPage from '../pages/ErrorPage';
 
 function OAuthCallback() {
   const { refreshSession } = useAuth();
@@ -42,7 +43,7 @@ function AppRouter() {
             <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
             <Route path="/app" element={<ProtectedRoute><WorkspacePage /></ProtectedRoute>} />
             <Route path="/workspace" element={<Navigate to="/app" replace />} />
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            <Route path="*" element={<ErrorPage />} />
           </Routes>
         </BrowserRouter>
       </WorkspaceProvider>

@@ -8,9 +8,18 @@ const { serveMock } = require('./controllers/mock-public.controller');
 const { apiRateLimit } = require('./middleware/rate-limit.middleware');
 const { errorHandler } = require('./middleware/error.middleware');
 const prisma = require('./config/database');
+const logger = require('./utils/logger');
+const crypto = require('crypto');
 
 const app = express();
 app.set('trust proxy', 1);
+app.use((req, res, next) => {
+  req.requestId = req.get('x-request-id') || crypto.randomUUID();
+  res.setHeader('x-request-id', req.requestId);
+  logger.info('request.started', { requestId: req.requestId, method: req.method, path: req.path });
+  res.on('finish', () => logger.info('request.completed', { requestId: req.requestId, statusCode: res.statusCode, method: req.method, path: req.path }));
+  next();
+});
 app.use(helmet());
 const localFrontendOrigins = [
   process.env.FRONTEND_URL,
