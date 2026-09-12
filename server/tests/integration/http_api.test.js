@@ -32,4 +32,15 @@ describe('HTTP API integration', () => {
     assert.strictEqual(response.status, 401);
     assert.strictEqual(body.message, 'Unauthorized');
   });
+
+  it('rejects cross-site state-changing requests before authentication', async () => {
+    const response = await fetch(`${baseUrl}/api/auth/logout`, {
+      method: 'POST',
+      headers: { Origin: 'https://attacker.example' },
+    });
+    const body = await response.json();
+
+    assert.strictEqual(response.status, 403);
+    assert.strictEqual(body.message, 'Origin not allowed');
+  });
 });

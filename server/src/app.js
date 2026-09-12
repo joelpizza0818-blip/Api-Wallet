@@ -19,6 +19,14 @@ const localFrontendOrigins = [
   'http://localhost:5175',
   'http://localhost:5176',
 ].filter(Boolean);
+const stateChangingMethods = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+app.use((req, res, next) => {
+  const origin = req.get('origin');
+  if (origin && stateChangingMethods.has(req.method) && !localFrontendOrigins.includes(origin)) {
+    return res.status(403).json({ success: false, message: 'Origin not allowed' });
+  }
+  return next();
+});
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin || localFrontendOrigins.includes(origin)) return callback(null, true);
