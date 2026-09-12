@@ -1,6 +1,6 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert');
-const { buildRequest, resolveAuthorization } = require('../../src/services/requestRunner.service');
+const { buildRequest, resolveAuthorization, hasSensitiveQueryData } = require('../../src/services/requestRunner.service');
 
 describe('Request runner unit behavior', () => {
   it('builds a request with query parameters and authorization', async () => {
@@ -24,5 +24,10 @@ describe('Request runner unit behavior', () => {
     assert.deepStrictEqual(await resolveAuthorization({ type: 'apikey', key: 'X-Test', value: 'secret' }), {
       'X-Test': 'secret',
     });
+  });
+
+  it('detects credentials placed in URL query parameters', () => {
+    assert.strictEqual(hasSensitiveQueryData(new URL('https://example.com/callback?token=secret')), true);
+    assert.strictEqual(hasSensitiveQueryData(new URL('https://example.com/items?page=2')), false);
   });
 });

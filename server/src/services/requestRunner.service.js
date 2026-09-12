@@ -19,10 +19,22 @@ function isDevelopmentLoopback(url) {
   return hostname === 'localhost' || hostname.endsWith('.localhost') || hostname === '127.0.0.1' || hostname === '::1';
 }
 
+const sensitiveQueryNames = /^(token|access_token|api[_-]?key|secret|password|authorization|credential)$/i;
+
+function hasSensitiveQueryData(url) {
+  for (const [name] of url.searchParams) {
+    if (sensitiveQueryNames.test(name)) return true;
+  }
+  return false;
+}
+
 async function safeUrl(targetUrl) {
   const url = new URL(targetUrl);
   if (!['http:', 'https:'].includes(url.protocol)) {
     throw new Error('Only HTTP(S) destinations are allowed');
+  }
+  if (process.env.BLOCK_SENSITIVE_QUERY_PARAMS !== 'false' && hasSensitiveQueryData(url)) {
+    throw fail('Sensitive credentials must not be sent in URL query parameters', 400);
   }
 
   const records = await dns.lookup(url.hostname, { all: true });
@@ -258,4 +270,5 @@ module.exports = {
   resolveRequestVariables,
   resolveAuthorization,
   saveExecution,
+  hasSensitiveQueryData,
 };
