@@ -8,6 +8,30 @@ const THEME_PREF_KEY = 'api-wallet-theme-prefs';
 const WorkspaceContext = createContext(null);
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
+const hexToRgb = (hex) => {
+  const value = hex.replace('#', '');
+  return {
+    r: Number.parseInt(value.slice(0, 2), 16),
+    g: Number.parseInt(value.slice(2, 4), 16),
+    b: Number.parseInt(value.slice(4, 6), 16),
+  };
+};
+
+const ensureDarkHex = (hex) => {
+  const rgb = hexToRgb(hex);
+  const luminance = (rgb.r * 0.2126 + rgb.g * 0.7152 + rgb.b * 0.0722) / 255;
+  if (luminance <= 0.22) return hex;
+  const scale = 0.22 / luminance;
+  const channel = (value) => Math.round(value * scale).toString(16).padStart(2, '0');
+  return `#${channel(rgb.r)}${channel(rgb.g)}${channel(rgb.b)}`;
+};
+
+const lightenHex = (hex, amount) => {
+  const { r, g, b } = hexToRgb(hex);
+  const channel = (value) => Math.round(value + (255 - value) * amount).toString(16).padStart(2, '0');
+  return `#${channel(r)}${channel(g)}${channel(b)}`;
+};
+
 export function WorkspaceProvider({ children }) {
   const { isAuthenticated } = useAuth();
   const [primaryTheme, setPrimaryTheme] = useState(() => {
@@ -15,6 +39,13 @@ export function WorkspaceProvider({ children }) {
       return JSON.parse(localStorage.getItem(THEME_PREF_KEY) || '{}').primaryTheme || 'dark';
     } catch {
       return 'dark';
+    }
+  });
+  const [customBackground, setCustomBackground] = useState(() => {
+    try {
+      return ensureDarkHex(JSON.parse(localStorage.getItem(THEME_PREF_KEY) || '{}').customBackground || '#0f0f0f');
+    } catch {
+      return '#0f0f0f';
     }
   });
   const [accentColor, setAccentColor] = useState(() => {
@@ -90,7 +121,17 @@ export function WorkspaceProvider({ children }) {
   }, [isAuthenticated]);
 
   useEffect(() => {
-    const theme = PRIMARY_THEMES.find((item) => item.id === primaryTheme) || PRIMARY_THEMES[0];
+    const selectedTheme = PRIMARY_THEMES.find((item) => item.id === primaryTheme);
+    const theme = selectedTheme || {
+      id: 'custom',
+      name: 'Personalizado',
+      bg: customBackground,
+      surface: lightenHex(customBackground, 0.08),
+      surfaceAlt: lightenHex(customBackground, 0.16),
+      border: lightenHex(customBackground, 0.27),
+      text: '#f8fafc',
+      isDark: true,
+    };
     const accent = ACCENT_COLORS.find((item) => item.id === accentColor) || ACCENT_COLORS[0];
     const saturation = 30 + (accentIntensity * 0.55);
     const lightness = 70 - (accentIntensity * 0.15);
@@ -127,8 +168,8 @@ export function WorkspaceProvider({ children }) {
       link.href = dataUri;
     } catch {}
 
-    localStorage.setItem(THEME_PREF_KEY, JSON.stringify({ primaryTheme: theme.id, accentColor: accent.id, accentHue, accentIntensity }));
-  }, [primaryTheme, accentColor, accentHue, accentIntensity]);
+    localStorage.setItem(THEME_PREF_KEY, JSON.stringify({ primaryTheme: theme.id, customBackground, accentColor: accent.id, accentHue, accentIntensity }));
+  }, [primaryTheme, customBackground, accentColor, accentHue, accentIntensity]);
 
   const addApi = async (collectionId, api) => {
     const response = await fetch(`${API_URL}/api/collections/${collectionId}/requests`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(api) });
@@ -286,7 +327,7 @@ export function WorkspaceProvider({ children }) {
 
   return (
     <WorkspaceContext.Provider value={{
-      primaryTheme, setPrimaryTheme, accentColor, setAccentColor, accentHue, setAccentHue, accentIntensity, setAccentIntensity,
+      primaryTheme, setPrimaryTheme, customBackground, setCustomBackground, accentColor, setAccentColor, accentHue, setAccentHue, accentIntensity, setAccentIntensity,
       collections, apiKeys, workspaceName, setWorkspaceName, workspaces,
       projects, activeWorkspaceId, activeProjectId, createWorkspace, createProject, switchWorkspace, flows, environments, workspaceDetails, createFlow,
       toggleFlowStatus, deleteFlow, runFlowNow, addApi, createBlankRequest, deleteApi,

@@ -140,6 +140,18 @@
   margin-bottom: 2px;
 }
 
+.wb-postman-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+}
+
+.wb-postman-logo {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+}
+
 .wb-card-heading p {
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
@@ -197,6 +209,34 @@
 .wb-swatch-name {
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
+}
+
+.wb-custom-color-control {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-3);
+  margin-top: var(--spacing-3);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.wb-custom-color-input {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.wb-custom-color-input input {
+  width: 30px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
 }
 
 /* Accent Swatches */

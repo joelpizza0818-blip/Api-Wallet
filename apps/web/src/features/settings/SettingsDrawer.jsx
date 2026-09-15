@@ -19,6 +19,8 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
   const {
     primaryTheme,
     setPrimaryTheme,
+    customBackground,
+    setCustomBackground,
     accentColor,
     setAccentColor,
     accentHue,
@@ -162,6 +164,22 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
     setAccentIntensity(accent.intensity);
   };
 
+  const handleBackgroundSelect = (themeId) => {
+    setPrimaryTheme(themeId);
+  };
+
+  const handleCustomBackgroundChange = (event) => {
+    const { r, g, b } = [1, 3, 5].reduce((channels, index, channelIndex) => {
+      channels[channelIndex] = Number.parseInt(event.target.value.slice(index, index + 2), 16);
+      return channels;
+    }, []);
+    const luminance = (r * 0.2126 + g * 0.7152 + b * 0.0722) / 255;
+    const scale = luminance > 0.22 ? 0.22 / luminance : 1;
+    const channel = (value) => Math.round(value * scale).toString(16).padStart(2, '0');
+    setCustomBackground(`#${channel(r)}${channel(g)}${channel(b)}`);
+    setPrimaryTheme('custom');
+  };
+
   return (
     <div className="wb-settings-overlay" onClick={onClose}>
       <aside
@@ -249,7 +267,7 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
                         key={theme.id}
                         type="button"
                         className={`wb-theme-swatch ${isSelected ? 'wb-theme-swatch--active' : ''}`}
-                        onClick={() => setPrimaryTheme(theme.id)}
+                        onClick={() => handleBackgroundSelect(theme.id)}
                         style={{ backgroundColor: theme.bg }}
                       >
                         <div className="wb-swatch-header">
@@ -271,6 +289,14 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
                     );
                   })}
                 </div>
+
+                <label className="wb-custom-color-control">
+                  <span>Color personalizado</span>
+                  <span className="wb-custom-color-input">
+                    <input type="color" value={customBackground} onChange={handleCustomBackgroundChange} aria-label="Elegir color de fondo personalizado" />
+                    <output>{customBackground.toUpperCase()}</output>
+                  </span>
+                </label>
               </div>
 
               {/* Color Secundario (Accent) */}
@@ -331,7 +357,18 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
               </div>
 
               <div className="wb-settings-card">
-                <div className="wb-card-heading"><h3>Importar desde Postman</h3><p>Importa una colección JSON y sus requests al proyecto actual.</p></div>
+                <div className="wb-card-heading">
+                  <div className="wb-postman-heading">
+                    <svg className="wb-postman-logo" viewBox="0 0 40 40" aria-hidden="true">
+                      <circle cx="20" cy="20" r="20" fill="#ff6c37" />
+                      <path d="M11 20a9 9 0 0 1 18 0H11Z" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" />
+                      <path d="m20 20 7-7" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" />
+                      <circle cx="20" cy="20" r="2.5" fill="#fff" />
+                    </svg>
+                    <h3>Importar desde Postman</h3>
+                  </div>
+                  <p>Importa una colección JSON y sus requests al proyecto actual.</p>
+                </div>
                 <label className="btn btn--secondary btn--md" style={{ display: 'inline-flex', cursor: 'pointer' }}>Seleccionar colección JSON<input type="file" accept=".json,application/json" hidden onChange={importPostman} /></label>
                 {importMsg && <p className="wb-alert-success">{importMsg}</p>}
               </div>
