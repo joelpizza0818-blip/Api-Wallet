@@ -3,6 +3,10 @@ import './AiChat.css';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 const initialChat = () => ({ id: crypto.randomUUID(), title: 'Nuevo chat', messages: [] });
+function Icon({ name, size = 14 }) {
+  const paths = { sparkle: 'M12 2l1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8L12 2zm6 13l.7 2.3L21 18l-2.3.7L18 21l-.7-2.3L15 18l2.3-.7L18 15z', close: 'M5 5l14 14M19 5L5 19', edit: 'M4 16.5V20h3.5L18.8 8.7l-3.5-3.5L4 16.5zM14.5 6.8l2.7 2.7', trash: 'M5 7h14M10 11v5M14 11v5M8 7l1-2h6l1 2v12H8V7z', paperclip: 'M8 12.5l5.5-5.5a3 3 0 014.2 4.2l-6.5 6.5a4.5 4.5 0 01-6.4-6.4l6.8-6.8', copy: 'M8 8V4h10v10h-4M4 8h10v12H4z', check: 'M4 12l5 5L20 6' };
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={paths[name]} /></svg>;
+}
 
 function CodeBlock({ code, language }) {
   const [copied, setCopied] = useState(false);
@@ -18,7 +22,7 @@ function CodeBlock({ code, language }) {
       <div className="ai-code-block-header">
         <span className="ai-code-lang">{language || 'code'}</span>
         <button type="button" className="ai-code-copy-btn" onClick={handleCopy}>
-          {copied ? '✓ Copiado' : '📋 Copiar'}
+          {copied ? <><Icon name="check" /> Copiado</> : <><Icon name="copy" /> Copiar</>}
         </button>
       </div>
       <pre className="ai-code-block">
@@ -268,13 +272,13 @@ export default function AiChat({ isOpen, onClose }) {
       <header className="ai-chat-header">
         <div>
           <div className="ai-chat-title-row">
-            <span className="ai-sparkle-icon">✦</span>
+            <span className="ai-sparkle-icon"><Icon name="sparkle" size={18} /></span>
             <strong>Asistente IA API Vault</strong>
           </div>
           <small>{active?.messages?.length || 0} mensajes · Respuestas inteligentes y código</small>
         </div>
         <button type="button" className="ai-close-btn" onClick={onClose} title="Cerrar Asistente">
-          ✕
+          <Icon name="close" />
         </button>
       </header>
 
@@ -326,7 +330,7 @@ export default function AiChat({ isOpen, onClose }) {
                             setEditingTitle(chat.title || '');
                           }}
                         >
-                          ✎
+                          <Icon name="edit" />
                         </button>
                         <button
                           type="button"
@@ -334,7 +338,7 @@ export default function AiChat({ isOpen, onClose }) {
                           title="Eliminar chat"
                           onClick={(e) => handleDeleteChat(e, chat.id)}
                         >
-                          🗑
+                          <Icon name="trash" />
                         </button>
                       </div>
                     </>
@@ -352,7 +356,7 @@ export default function AiChat({ isOpen, onClose }) {
               <div key={i} className={`ai-message ${message.role}`}>
                 <div className="ai-message-header">
                   <span className="ai-role-badge">
-                    {message.role === 'user' ? 'Tú' : '✦ Asistente API'}
+                    {message.role === 'user' ? 'Tú' : <><Icon name="sparkle" /> Asistente API</>}
                   </span>
                 </div>
                 <div className="ai-message-content">
@@ -362,7 +366,7 @@ export default function AiChat({ isOpen, onClose }) {
             ))
           ) : (
             <div className="ai-empty-state">
-              <div className="ai-empty-icon">✦</div>
+              <div className="ai-empty-icon"><Icon name="sparkle" size={28} /></div>
               <h3>¿En qué puedo ayudarte hoy?</h3>
               <p>Pregúntame sobre diseño de endpoints, payloads JSON, scripts de pre-solicitud, headers o depuración de APIs.</p>
             </div>
@@ -388,7 +392,7 @@ export default function AiChat({ isOpen, onClose }) {
         }}
       >
         {image && <div className="ai-image-preview"><img src={image} alt="Imagen adjunta" /><button type="button" onClick={() => setImage(null)}>Quitar</button></div>}
-        <label className="ai-image-button">📎 Imagen<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden onChange={(e) => { const file = e.target.files?.[0]; if (!file || file.size > 6 * 1024 * 1024) return; const reader = new FileReader(); reader.onload = () => setImage(reader.result); reader.readAsDataURL(file); }} /></label>
+        <label className="ai-image-button"><Icon name="paperclip" /> Imagen<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden onChange={(e) => { const file = e.target.files?.[0]; if (!file || file.size > 6 * 1024 * 1024) return; const reader = new FileReader(); reader.onload = () => setImage(reader.result); reader.readAsDataURL(file); }} /></label>
         <textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
