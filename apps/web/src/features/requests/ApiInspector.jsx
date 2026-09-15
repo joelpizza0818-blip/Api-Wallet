@@ -118,26 +118,23 @@ function ApiInspector({ api }) {
     setIsLoading(true);
     const startedAt = performance.now();
     try {
-      if (!url.trim()) throw new Error('Introduce la URL completa del endpoint.');
-      const variables = {};
-      let requestHeaders = Object.fromEntries(headers.filter((item) => item.key).map((item) => [item.key, item.value || '']));
-      const scriptState = { variables: { set: (key, value) => { variables[key] = String(value); }, get: (key) => variables[key] }, request: { method, url, headers: { add: ({ key, value }) => { if (key) requestHeaders[key] = value; } } }, response: null };
-      runScript(preRequestScript, { ...scriptState, setNextRequest: () => {}, variables: { ...scriptState.variables, replaceIn: (value) => String(value).replace(/\{\{([^}]+)\}\}/g, (_, key) => variables[key] || '') } });
-      const query = new URLSearchParams((api.params || []).filter((item) => item.key && item.value).map((item) => [item.key, item.value]));
-      const targetUrl = query.toString() ? `${url}${url.includes('?') ? '&' : '?'}${query}` : url;
-      if (authorization.type === 'bearer' && authorization.token) requestHeaders.Authorization = `Bearer ${authorization.token}`;
-      if (authorization.type === 'apikey' && authorization.key) requestHeaders[authorization.key] = authorization.value || '';
-      if (authorization.type === 'basic' && authorization.username) requestHeaders.Authorization = `Basic ${btoa(`${authorization.username}:${authorization.password || ''}`)}`;
-      if (authorization.type === 'oauth2' && authorization.token) requestHeaders.Authorization = `Bearer ${authorization.token}`;
-      if (bodyContent && !['GET', 'HEAD'].includes(method) && !Object.keys(requestHeaders).some((key) => key.toLowerCase() === 'content-type')) requestHeaders['Content-Type'] = 'application/json';
-      const result = await fetch(targetUrl, { credentials: 'include', method, headers: requestHeaders, body: !['GET', 'HEAD'].includes(method) && bodyContent ? bodyContent : undefined });
-      const text = await result.text();
+      const requestUrl = url.trim();
+      if (!requestUrl) throw new Error('Introduce la URL completa del endpoint.');
+      let parsedTarget;
+      try { parsedTarget = new URL(requestUrl); } catch { throw new Error('La URL debe ser absoluta e incluir http:// o https://.'); }
+      if (!['http:', 'https:'].includes(parsedTarget.protocol)) throw new Error('La URL solo puede usar http:// o https://.');
+      await updateApi(api.id, { authorization, preRequestScript, testScript, headers, body: bodyContent, method, path: url.startsWith('/') ? url : api.path, url, name: api.name });
+      const executionResponse = await fetch(`${API_URL}/api/requests/${api.id}/execute`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+      const executionPayload = await executionResponse.json();
+      if (!executionResponse.ok) throw new Error(executionPayload.message || 'No se pudo ejecutar la petición.');
+      const result = executionPayload.data;
+      const text = result.body || '';
       let formatted = text;
       if (responseFormat === 'json') { try { formatted = JSON.stringify(JSON.parse(text), null, 2); } catch {} }
       if (responseFormat === 'html') formatted = text;
       setResponse(formatted);
       setResponseMeta({
-        status: `${result.status} ${result.statusText}`,
+        status: result.statusCode ? `${result.statusCode}` : 'Error',
         time: `${Math.round(performance.now() - startedAt)} ms`,
         size: `${new Blob([text]).size} B`,
       });
@@ -146,16 +143,15 @@ function ApiInspector({ api }) {
           type: result.ok ? 'info' : 'error',
           method,
           url: targetUrl,
-          status: `${result.status} ${result.statusText}`,
+          status: result.statusCode ? `${result.statusCode}` : 'Error',
           time: `${Math.round(performance.now() - startedAt)}ms`,
           size: `${new Blob([text]).size} B`,
-          text: `${method} ${targetUrl} -> ${result.status} ${result.statusText} (${Math.round(performance.now() - startedAt)}ms)`,
+          text: `${method} ${requestUrl} -> ${result.statusCode || 'Error'} (${Math.round(performance.now() - startedAt)}ms)`,
         });
       }
       const test = (name, passed) => { if (!passed) throw new Error(name || 'Test failed'); };
       const pmTest = (name, callback) => { try { callback(); if (addConsoleLog) addConsoleLog({ type: 'success', text: `[Test OK] ${name}` }); } catch (error) { throw new Error(`${name}: ${error.message}`); } };
       const pmExpect = (value) => ({ to: { eql: (expected) => { if (value !== expected) throw new Error(`Expected ${value} to equal ${expected}`); }, include: (expected) => { if (!String(value).includes(expected)) throw new Error(`Expected value to include ${expected}`); } } });
-      runScript(testScript, { test, test: pmTest, expect: pmExpect, response: { status: result.status, code: result.status, body: text, text: () => text, json: () => JSON.parse(text) } }, 'Post-response Test');
     } catch (error) {
       if (addConsoleLog) {
         addConsoleLog({

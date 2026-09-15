@@ -11,6 +11,7 @@ router.route('/projects/:projectId/collections').get(c.listCollections).post(c.c
 router.route('/collections/:collectionId').patch(c.updateCollection).delete(c.removeCollection);
 router.route('/collections/:collectionId/requests').get(c.listRequests).post(c.createRequest);
 router.route('/requests/:requestId').patch(c.updateRequest).delete(c.removeRequest);
+router.post('/requests/:requestId/execute', c.executeSavedRequest);
 router.route('/projects/:projectId/environments').get(c.listEnvironments).post(c.createEnvironment);
 router.route('/environments/:environmentId/secrets').get(c.listSecrets).post(c.createSecret);
 router.delete('/secrets/:secretId', c.removeSecret);

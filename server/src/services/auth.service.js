@@ -110,4 +110,4 @@ async function changePassword(userId, { currentPassword, newPassword }) {
   return prisma.user.update({ where: { id: userId }, data: { passwordHash: await bcrypt.hash(newPassword, 12) } });
 }
 
-module.exports = { createToken, findOrCreateGoogleUser, findOrCreateGithubUser, publicUser, registerLocal, loginLocal, requestEmailVerification, verifyEmailToken, updateProfile, changePassword };
+module.exports = { createToken, findOrCreateGithubUser, publicUser, registerLocal, loginLocal, requestEmailVerification, verifyEmailToken, updateProfile, changePassword };

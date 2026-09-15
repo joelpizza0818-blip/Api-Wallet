@@ -5,4 +5,5 @@ module.exports = {
 	createRequest: resource.createRequest,
 	updateRequest: resource.updateRequest,
 	removeRequest: resource.removeRequest,
+	executeSavedRequest: resource.executeSavedRequest,
 };

@@ -4,6 +4,7 @@ const apiKeyService = require('../services/apiKey.service');
 const secretService = require('../services/secret.service');
 const environmentService = require('../services/environment.service');
 const { createActivity } = require('../services/activity.service');
+const { executeRequest } = require('../services/requestRunner.service');
 const { WRITE_ROLES, ADMIN_ROLES, requireWorkspaceRole, projectAccess, collectionAccess } = require('../services/authorization.service');
 
 const fail = (message, statusCode = 400) => Object.assign(new Error(message), { statusCode });
@@ -325,6 +326,14 @@ async function removeRequest(req, res) {
   res.status(204).end();
 }
 
+async function executeSavedRequest(req, res) {
+  const item = await prisma.apiRequest.findUnique({ where: { id: req.params.requestId }, include: { collection: { include: { project: true } } } });
+  if (!item) throw fail('Request not found', 404);
+  await requireWorkspaceRole(req.user.id, item.collection.project.workspaceId);
+  const result = await executeRequest(item.id, { environmentId: req.body?.environmentId || null, apiKeyId: req.body?.apiKeyId || null });
+  page(res, result);
+}
+
 // =================== ENVIRONMENTS ===================
 async function listEnvironments(req, res) {
   await projectAccess(req.user.id, req.params.projectId);
@@ -430,6 +439,7 @@ module.exports = {
   createRequest,
   updateRequest,
   removeRequest,
+  executeSavedRequest,
   listEnvironments,
   createEnvironment,
   listSecrets,

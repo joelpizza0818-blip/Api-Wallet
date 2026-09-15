@@ -21,7 +21,7 @@ function AuthPage({ mode }) {
   const isRegister = mode === 'register';
   const title = isRegister ? 'Crea tu cuenta' : 'Bienvenido de nuevo';
   const subtitle = isRegister ? 'Organiza tus APIs y credenciales desde un solo lugar.' : 'Inicia sesión para continuar con API-Wallet.';
-  const { login, register, continueWithGoogle, continueWithGithub } = useAuth();
+  const { login, register, continueWithGithub } = useAuth();
   const [verificationMessage, setVerificationMessage] = useState('');
   const navigate = useNavigate();
   const location = useLocation();
@@ -68,7 +68,6 @@ function AuthPage({ mode }) {
           {verificationMessage && <p role="status">{verificationMessage}</p>}
           {!window.__TAURI_INTERNALS__ && window.location.protocol !== 'tauri:' && window.location.hostname !== 'tauri.local' && <>
             <div className="auth-divider"><span>o</span></div>
-            <button className="auth-google-button" type="button" onClick={() => continueWithGoogle().catch((error) => notify(error.message, 'error'))}><GoogleIcon />Continuar con Google</button>
             <button className="auth-google-button" type="button" onClick={() => continueWithGithub().catch((error) => notify(error.message, 'error'))}><GithubIcon />Continuar con GitHub</button>
           </>}
           {isRegister ? (

@@ -3,6 +3,7 @@ const net = require('net');
 const prisma = require('../config/database');
 const { resolveEnvironmentVariables } = require('./environment.service');
 const { getPlaintextApiKey } = require('./apiKey.service');
+const { runScript } = require('./scriptSandbox.service');
 
 const fail = (message, statusCode = 400) => Object.assign(new Error(message), { statusCode });
 
@@ -220,6 +221,11 @@ async function executeRequest(requestId, options = {}) {
   try {
     const built = await buildRequest(request, environmentId);
     const destination = await safeUrl(built.url);
+    const preScript = request.preRequestScript || request.collection?.preRequestScript || '';
+    if (preScript) {
+      const scripted = runScript(preScript, { phase: 'pre', headers: built.headers });
+      Object.assign(built.headers, scripted.headers);
+    }
 
     const res = await fetch(destination, {
       method: built.method,
@@ -232,6 +238,16 @@ async function executeRequest(requestId, options = {}) {
     statusCode = res.status;
     responseBody = await res.text();
     responseHeaders = Object.fromEntries(res.headers.entries());
+    const postScript = request.testScript || request.collection?.testScript || '';
+    if (postScript) {
+      const scripted = runScript(postScript, {
+        phase: 'post',
+        headers: built.headers,
+        response: { status: res.status, code: res.status, body: responseBody, headers: responseHeaders },
+      });
+      const failed = scripted.tests.find((test) => !test.passed);
+      if (failed) errorMessage = `Script test failed: ${failed.name}${failed.error ? ` - ${failed.error}` : ''}`;
+    }
   } catch (err) {
     errorMessage = err.message;
   }
