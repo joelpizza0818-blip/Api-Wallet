@@ -122,6 +122,7 @@ export default function AiChat({ isOpen, onClose }) {
   const [chats, setChats] = useState([]);
   const [activeId, setActiveId] = useState(null);
   const [draft, setDraft] = useState('');
+  const [image, setImage] = useState(null);
   const [loading, setLoading] = useState(false);
   const [editingChatId, setEditingChatId] = useState(null);
   const [editingTitle, setEditingTitle] = useState('');
@@ -175,9 +176,9 @@ export default function AiChat({ isOpen, onClose }) {
 
   const send = async () => {
     const text = draft.trim();
-    if (!text || loading || !active) return;
+    if ((!text && !image) || loading || !active) return;
 
-    const history = [...(active.messages || []), { role: 'user', content: text }];
+    const history = [...(active.messages || []), { role: 'user', content: text || 'Analiza esta imagen.', imageData: image }];
     updateChat(history);
     setDraft('');
     setLoading(true);
@@ -187,12 +188,13 @@ export default function AiChat({ isOpen, onClose }) {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: text }),
+        body: JSON.stringify({ content: text, imageData: image }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'No se pudo consultar el modelo');
 
       updateChat([...history, { role: 'assistant', content: data.reply }]);
+      setImage(null);
     } catch (error) {
       updateChat([...history, { role: 'assistant', content: `Error: ${error.message}` }]);
     } finally {
@@ -385,6 +387,8 @@ export default function AiChat({ isOpen, onClose }) {
           send();
         }}
       >
+        {image && <div className="ai-image-preview"><img src={image} alt="Imagen adjunta" /><button type="button" onClick={() => setImage(null)}>Quitar</button></div>}
+        <label className="ai-image-button">📎 Imagen<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden onChange={(e) => { const file = e.target.files?.[0]; if (!file || file.size > 6 * 1024 * 1024) return; const reader = new FileReader(); reader.onload = () => setImage(reader.result); reader.readAsDataURL(file); }} /></label>
         <textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
@@ -397,7 +401,7 @@ export default function AiChat({ isOpen, onClose }) {
           placeholder="Escribe tu mensaje… (Enter para enviar, Shift+Enter para salto)"
           rows={2}
         />
-        <button type="submit" disabled={loading || !draft.trim()} title="Enviar mensaje">
+        <button type="submit" disabled={loading || (!draft.trim() && !image)} title="Enviar mensaje">
           <span>Enviar</span>
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
             <line x1="22" y1="2" x2="11" y2="13" />

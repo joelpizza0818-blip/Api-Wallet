@@ -78,7 +78,8 @@ router.post('/chats/:id/messages', async (req, res, next) => {
     if (!chatRecord) return res.status(404).json({ message: 'Chat no encontrado' });
 
     const content = String(req.body.content || '').trim();
-    if (!content) return res.status(400).json({ message: 'El mensaje no puede estar vacío.' });
+    const imageData = typeof req.body.imageData === 'string' && req.body.imageData.startsWith('data:image/') ? req.body.imageData : null;
+    if (!content && !imageData) return res.status(400).json({ message: 'El mensaje no puede estar vacío.' });
 
     // The database is the source of truth for context
     const persisted = await prisma.aiMessage.findMany({
@@ -86,7 +87,7 @@ router.post('/chats/:id/messages', async (req, res, next) => {
       orderBy: { createdAt: 'desc' },
       take: 20,
     });
-    const context = [...persisted.reverse(), { role: 'user', content }];
+    const context = [...persisted.reverse(), { role: 'user', content, imageData }];
     const reply = await generateReply(context);
 
     const isFirstTurn = chatRecord.title === 'Nuevo chat' || persisted.length === 0;

@@ -3,7 +3,12 @@ const fetchFn = (...args) => fetch(...args);
 async function generateReply(messages) {
   const key = process.env.API_KEY_GEMINI1 || process.env.API_KEY_GEMINI2;
   if (!key) { const error = new Error('No hay una API key de IA configurada.'); error.statusCode = 503; throw error; }
-  const contents = messages.slice(-20).map((message) => ({ role: message.role === 'assistant' ? 'model' : 'user', parts: [{ text: String(message.content || '') }] }));
+  const contents = messages.slice(-20).map((message) => {
+    const parts = [{ text: String(message.content || '') }];
+    const match = typeof message.imageData === 'string' && /^data:(image\/[\w.+-]+);base64,(.+)$/.exec(message.imageData);
+    if (match && message.role !== 'assistant') parts.push({ inlineData: { mimeType: match[1], data: match[2] } });
+    return { role: message.role === 'assistant' ? 'model' : 'user', parts };
+  });
   const model = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
   const response = await fetchFn(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ systemInstruction: { parts: [{ text: process.env.BOT_PROMPT || 'Responde en español de forma útil y segura.' }] }, contents }), signal: AbortSignal.timeout(30000) });
   const data = await response.json();

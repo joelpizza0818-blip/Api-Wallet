@@ -51,7 +51,11 @@ if (hasGithubConfiguration()) {
   }));
 
   router.get('/github', passport.authenticate('github', { scope: ['user:email'], session: false }));
-  router.get('/github/callback', passport.authenticate('github', { session: false, failureRedirect: `${frontendUrl()}/register?error=github_auth_failed` }), (req, res) => redirectWithSession(req, res, '/dashboard'));
+  // OAuth is a sign-in method that can also create the user on first access.
+  // Do not send failures to /register: that makes the GitHub button on the
+  // login page appear to switch flows. A failed OAuth attempt should return
+  // to the login entry point instead.
+  router.get('/github/callback', passport.authenticate('github', { session: false, failureRedirect: `${frontendUrl()}/login?error=github_auth_failed` }), (req, res) => redirectWithSession(req, res, '/dashboard'));
 } else {
   router.get('/github', (_req, res) => res.status(503).json({ success: false, message: 'GitHub OAuth requires GitHub OAuth App credentials.' }));
 }

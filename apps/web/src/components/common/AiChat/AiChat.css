@@ -414,6 +414,9 @@
   display: flex;
   gap: 8px;
 }
+.ai-image-button { align-self: flex-end; cursor: pointer; color: var(--color-primary); font-size: 12px; white-space: nowrap; }
+.ai-image-preview { position: absolute; bottom: 72px; left: 12px; display: flex; align-items: center; gap: 8px; background: var(--color-surface); padding: 6px; border: 1px solid var(--color-border); border-radius: var(--radius-md); }
+.ai-image-preview img { width: 56px; height: 56px; object-fit: cover; border-radius: 4px; }
 
 .ai-chat-composer textarea {
   flex: 1;
