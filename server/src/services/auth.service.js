@@ -8,28 +8,6 @@ function createToken(user) {
   return jwt.sign({ sub: user.id, email: user.email }, process.env.JWT_SECRET, { expiresIn: '7d' });
 }
 
-async function findOrCreateGoogleUser(profile) {
-  const email = profile.emails?.[0]?.value?.toLowerCase();
-  if (!email) throw new Error('Google did not return an email address.');
-
-  const name = profile.displayName || email.split('@')[0];
-  const avatarUrl = profile.photos?.[0]?.value || null;
-  const existing = await prisma.user.findFirst({
-    where: { OR: [{ googleId: profile.id }, { email }] },
-  });
-
-  if (existing) {
-    return prisma.user.update({
-      where: { id: existing.id },
-      data: { googleId: profile.id, avatarUrl: avatarUrl || existing.avatarUrl, provider: 'GOOGLE' },
-    });
-  }
-
-  return prisma.user.create({
-    data: { email, name, googleId: profile.id, avatarUrl, provider: 'GOOGLE' },
-  });
-}
-
 async function findOrCreateGithubUser(profile) {
   const email = profile.emails?.[0]?.value?.toLowerCase();
   if (!email) throw new Error('GitHub did not return an email address.');

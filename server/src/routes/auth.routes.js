@@ -51,7 +51,7 @@ if (hasGithubConfiguration()) {
   }));
 
   router.get('/github', passport.authenticate('github', { scope: ['user:email'], session: false }));
-  router.get('/github/callback', passport.authenticate('github', { session: false, failureRedirect: `${frontendUrl()}/register?error=github_auth_failed` }), (req, res) => redirectWithSession(req, res, '/'));
+  router.get('/github/callback', passport.authenticate('github', { session: false, failureRedirect: `${frontendUrl()}/register?error=github_auth_failed` }), (req, res) => redirectWithSession(req, res, '/dashboard'));
 } else {
   router.get('/github', (_req, res) => res.status(503).json({ success: false, message: 'GitHub OAuth requires GitHub OAuth App credentials.' }));
 }
