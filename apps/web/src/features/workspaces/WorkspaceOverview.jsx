@@ -31,7 +31,7 @@ function WorkspaceOverview({ onNavigateApis, onNavigateDocs, onNavigateFlows, on
     setAuthorization({ type: 'none', ...(collection?.authorization || {}) });
     setPreRequestScript(collection?.preRequestScript || '');
     setTestScript(collection?.testScript || '');
-  }, [collection?.id]);
+  }, [collection?.authorization, collection?.id, collection?.preRequestScript, collection?.testScript]);
 
   const totalApis = (collections || []).reduce((acc, collection) => acc + (collection.apis || []).length, 0);
   const userName = user?.name || user?.email || 'Usuario';

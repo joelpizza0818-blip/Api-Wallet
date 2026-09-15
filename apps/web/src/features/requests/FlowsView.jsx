@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useWorkspace } from '../workspaces/WorkspaceContext';
 import './FlowsView.css';
 
@@ -6,13 +6,13 @@ function FlowsView({ onOpenNewFlowModal }) {
   const { flows, activeProjectId, toggleFlowStatus, deleteFlow, runFlowNow } = useWorkspace();
   const [runningFlowId, setRunningFlowId] = useState(null);
   const [executions, setExecutions] = useState([]);
-  const loadExecutions = async () => {
+  const loadExecutions = useCallback(async () => {
     if (!activeProjectId) return;
     const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/projects/${activeProjectId}/executions`, { credentials: 'include' });
     if (response.ok) setExecutions((await response.json()).data || []);
-  };
+  }, [activeProjectId]);
 
-  useEffect(() => { loadExecutions().catch(() => {}); }, [activeProjectId, flows]);
+  useEffect(() => { loadExecutions().catch(() => {}); }, [loadExecutions, flows]);
 
   const handleRunNow = async (flowId) => {
     setRunningFlowId(flowId);

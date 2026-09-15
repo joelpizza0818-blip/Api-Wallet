@@ -55,7 +55,7 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
       setProjectInviteCode(workspace.inviteCode || '');
       setTeamMembers((workspace.members || []).map((member) => ({ id: member.userId, name: member.user.name, email: member.user.email, role: member.role, badge: member.role === 'ADMIN' || member.role === 'OWNER' ? 'role-admin' : member.role === 'QA' ? 'role-qa' : 'role-dev', avatar: member.user.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(member.user.email)}` })));
     }).catch(() => {});
-  }, [isOpen, activeWorkspaceId]);
+  }, [isOpen, activeWorkspaceId, API_URL]);
 
   // Profile Form state
   const [profileName, setProfileName] = useState(user?.name || '');

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import './AiChat.css';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
@@ -134,7 +134,25 @@ export default function AiChat({ isOpen, onClose }) {
 
   const active = useMemo(() => chats.find((chat) => chat.id === activeId) || chats[0], [chats, activeId]);
 
-  const loadChats = async () => {
+  const newChat = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/ai/chats`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: 'Nuevo chat' }),
+      });
+      const chat = response.ok ? await response.json() : initialChat();
+      setChats((prev) => [chat, ...prev]);
+      setActiveId(chat.id);
+    } catch {
+      const fallback = initialChat();
+      setChats((prev) => [fallback, ...prev]);
+      setActiveId(fallback.id);
+    }
+  }, []);
+
+  const loadChats = useCallback(async () => {
     try {
       const r = await fetch(`${API_URL}/api/ai/chats`, { credentials: 'include' });
       if (!r.ok) return;
@@ -154,11 +172,11 @@ export default function AiChat({ isOpen, onClose }) {
     } catch {
       setChats([initialChat()]);
     }
-  };
+  }, [activeId, newChat]);
 
   useEffect(() => {
     if (isOpen) loadChats();
-  }, [isOpen]);
+  }, [isOpen, loadChats]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -203,24 +221,6 @@ export default function AiChat({ isOpen, onClose }) {
       updateChat([...history, { role: 'assistant', content: `Error: ${error.message}` }]);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const newChat = async () => {
-    try {
-      const response = await fetch(`${API_URL}/api/ai/chats`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: 'Nuevo chat' }),
-      });
-      const chat = response.ok ? await response.json() : initialChat();
-      setChats((prev) => [chat, ...prev]);
-      setActiveId(chat.id);
-    } catch {
-      const fallback = initialChat();
-      setChats((prev) => [fallback, ...prev]);
-      setActiveId(fallback.id);
     }
   };
 

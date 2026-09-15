@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useWorkspace } from './WorkspaceContext';
 import { useFeedback } from '../../components/common/Feedback/FeedbackContext';
 import './ArtifactViews.css';
@@ -18,8 +18,8 @@ export function EnvironmentsView() {
   const { confirm, notify } = useFeedback();
   const [items, setItems] = useState([]); const [formOpen, setFormOpen] = useState(false); const [form, setForm] = useState({ name: '', baseUrl: '' });
   const [selectedId, setSelectedId] = useState(null); const [secrets, setSecrets] = useState([]); const [secretForm, setSecretForm] = useState({ name: '', value: '' }); const [error, setError] = useState('');
-  const load = async () => { if (!activeProjectId) return; const response = await fetch(`${API_URL}/api/projects/${activeProjectId}/environments`, { credentials: 'include' }); if (response.ok) setItems((await response.json()).data || []); else setError('No se pudieron cargar los entornos.'); };
-  useEffect(() => { load(); }, [activeProjectId]);
+  const load = useCallback(async () => { if (!activeProjectId) return; const response = await fetch(`${API_URL}/api/projects/${activeProjectId}/environments`, { credentials: 'include' }); if (response.ok) setItems((await response.json()).data || []); else setError('No se pudieron cargar los entornos.'); }, [activeProjectId]);
+  useEffect(() => { load(); }, [load]);
   const select = async (id) => { setSelectedId(id); const response = await fetch(`${API_URL}/api/environments/${id}/secrets`, { credentials: 'include' }); if (response.ok) setSecrets((await response.json()).data || []); else setError('No se pudieron cargar las variables.'); };
   const createEnvironment = async (event) => { event.preventDefault(); setError(''); const response = await fetch(`${API_URL}/api/projects/${activeProjectId}/environments`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) }); if (!response.ok) { setError((await response.json()).message || 'No se pudo crear el entorno.'); return; } setForm({ name: '', baseUrl: '' }); setFormOpen(false); notify('Entorno creado.'); load(); };
   const createSecret = async (event) => { event.preventDefault(); const response = await fetch(`${API_URL}/api/environments/${selectedId}/secrets`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(secretForm) }); if (!response.ok) { setError((await response.json()).message || 'No se pudo guardar la variable.'); return; } setSecretForm({ name: '', value: '' }); notify('Variable guardada.'); select(selectedId); };
@@ -40,8 +40,8 @@ export function DocumentsView() {
   const [form, setForm] = useState({ name: '', content: '' });
   const [editingId, setEditingId] = useState(null);
   const [error, setError] = useState('');
-  const load = async () => { if (!activeProjectId) return; const response = await fetch(`${API_URL}/api/projects/${activeProjectId}/documents`, { credentials: 'include' }); if (response.ok) setItems((await response.json()).data || []); else setError('No se pudieron cargar los documentos.'); };
-  useEffect(() => { load(); }, [activeProjectId]);
+  const load = useCallback(async () => { if (!activeProjectId) return; const response = await fetch(`${API_URL}/api/projects/${activeProjectId}/documents`, { credentials: 'include' }); if (response.ok) setItems((await response.json()).data || []); else setError('No se pudieron cargar los documentos.'); }, [activeProjectId]);
+  useEffect(() => { load(); }, [load]);
   const openNew = () => { setEditingId(null); setForm({ name: 'Documento sin titulo', content: '' }); setFormOpen(true); };
   const save = async (event) => { event.preventDefault(); const url = editingId ? `${API_URL}/api/documents/${editingId}` : `${API_URL}/api/projects/${activeProjectId}/documents`; const response = await fetch(url, { method: editingId ? 'PATCH' : 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) }); if (!response.ok) { setError((await response.json()).message || 'No se pudo guardar el documento.'); return; } setFormOpen(false); setForm({ name: '', content: '' }); setEditingId(null); notify('Documento guardado.'); load(); };
   const remove = async (id) => { if (!await confirm({ title: 'Eliminar documento', message: 'Esta accion no se puede deshacer.', confirmLabel: 'Eliminar' })) return; const response = await fetch(`${API_URL}/api/documents/${id}`, { method: 'DELETE', credentials: 'include' }); if (response.ok) { notify('Documento eliminado.'); load(); } else setError('No se pudo eliminar el documento.'); };
@@ -60,8 +60,8 @@ export function DocumentsView() {
 export function MocksView() {
   const { activeProjectId } = useWorkspace(); const { confirm, notify } = useFeedback();
   const [items, setItems] = useState([]); const [formOpen, setFormOpen] = useState(false); const [form, setForm] = useState({ name: '', slug: '' }); const [routeForms, setRouteForms] = useState({}); const [error, setError] = useState('');
-  const load = async () => { if (!activeProjectId) return; const response = await fetch(`${API_URL}/api/projects/${activeProjectId}/mocks`, { credentials: 'include' }); if (response.ok) setItems((await response.json()).data || []); else setError('No se pudieron cargar los mocks.'); };
-  useEffect(() => { load(); }, [activeProjectId]);
+  const load = useCallback(async () => { if (!activeProjectId) return; const response = await fetch(`${API_URL}/api/projects/${activeProjectId}/mocks`, { credentials: 'include' }); if (response.ok) setItems((await response.json()).data || []); else setError('No se pudieron cargar los mocks.'); }, [activeProjectId]);
+  useEffect(() => { load(); }, [load]);
   const save = async (event) => { event.preventDefault(); const response = await fetch(`${API_URL}/api/projects/${activeProjectId}/mocks`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) }); if (!response.ok) { setError((await response.json()).message || 'No se pudo crear el mock.'); return; } setForm({ name: '', slug: '' }); setFormOpen(false); notify('Mock creado.'); load(); };
   const addRoute = async (event, mockId) => { event.preventDefault(); const route = routeForms[mockId] || { method: 'GET', path: '/', statusCode: 200, responseBody: '' }; const response = await fetch(`${API_URL}/api/mocks/${mockId}/routes`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...route, statusCode: Number(route.statusCode), responseHeaders: [] }) }); if (!response.ok) { setError((await response.json()).message || 'No se pudo crear la ruta.'); return; } notify('Ruta mock creada.'); setRouteForms((current) => ({ ...current, [mockId]: { method: 'GET', path: '/', statusCode: 200, responseBody: '' } })); load(); };
   const remove = async (id) => { if (!await confirm({ title: 'Eliminar mock', message: 'Tambien se eliminaran sus rutas.', confirmLabel: 'Eliminar' })) return; const response = await fetch(`${API_URL}/api/mocks/${id}`, { method: 'DELETE', credentials: 'include' }); if (response.ok) { notify('Mock eliminado.'); load(); } else setError('No se pudo eliminar el mock.'); };

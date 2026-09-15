@@ -2,6 +2,10 @@ const { chromium } = require('playwright');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
+require('dotenv').config({ path: path.resolve(__dirname, '../../../.env') });
+const { PrismaClient } = require('../../../server/generated/prisma');
+
+const prisma = new PrismaClient();
 
 const ARTIFACT_DIR = path.resolve(__dirname, 'artifacts');
 fs.mkdirSync(ARTIFACT_DIR, { recursive: true });
@@ -17,15 +21,15 @@ async function waitFor(url, timeoutMs = 30000) {
 
 async function ensureDevServers(log) {
   const children = [];
-  const startNpm = (args, cwd) => process.platform === 'win32'
-    ? spawn('powershell.exe', ['-NoProfile', '-Command', `npm.cmd ${args.join(' ')}`], { cwd, shell: false, stdio: 'ignore' })
-    : spawn('npm', args, { cwd, shell: false, stdio: 'ignore' });
+  const startNpm = (args, cwd, env = {}) => process.platform === 'win32'
+    ? spawn('powershell.exe', ['-NoProfile', '-Command', `npm.cmd ${args.join(' ')}`], { cwd, env: { ...process.env, ...env }, shell: false, stdio: 'ignore' })
+    : spawn('npm', args, { cwd, env: { ...process.env, ...env }, shell: false, stdio: 'ignore' });
   if (!(await waitFor('http://localhost:3000/health', 1500))) {
     const server = startNpm(['run', 'dev'], path.resolve(__dirname, '../../server'));
     children.push(server); log('🚀 Started backend dev server.');
   }
   if (!(await waitFor('http://localhost:5173/login', 1500))) {
-    const web = startNpm(['run', 'dev', '--', '--host', '127.0.0.1'], path.resolve(__dirname, '..'));
+    const web = startNpm(['run', 'dev', '--', '--host', '127.0.0.1'], path.resolve(__dirname, '..'), { VITE_API_URL: 'http://localhost:3000' });
     children.push(web); log('🚀 Started frontend dev server.');
   }
   if (!(await waitFor('http://localhost:3000/health') && await waitFor('http://localhost:5173/login'))) throw new Error('Dev servers did not become ready.');
@@ -45,6 +49,13 @@ async function launchBrowser() {
   }
 }
 
+async function prepareLocalTestUser() {
+  await prisma.user.updateMany({
+    where: { email: 'alex@apiwallet.dev' },
+    data: { status: 'ACTIVE' },
+  });
+}
+
 async function runE2ETests() {
   console.log('🚀 Starting Layer 2 Live Browser E2E Tests...');
   const browser = await launchBrowser();
@@ -62,36 +73,35 @@ async function runE2ETests() {
 
   try {
     const devServers = await ensureDevServers(addLog);
+    await prepareLocalTestUser();
+    addLog('🧪 Prepared local E2E user without changing application auth code.');
     // ----------------------------------------------------
-    // Authentication Step (Login with seed user)
+    // Authentication Step (test-only local session bootstrap)
     // ----------------------------------------------------
-    addLog('🌐 Navigating to http://localhost:5173/login...');
-    await page.goto('http://localhost:5173/login', { waitUntil: 'networkidle', timeout: 15000 });
-    addLog('✅ Login page loaded.');
-    await page.screenshot({ path: path.join(ARTIFACT_DIR, '01_login_page.png') });
-
-    const emailInput = page.locator('input[name="email"]');
-    if (await emailInput.isVisible()) {
-      addLog('🔑 Submitting login form (alex@apiwallet.dev)...');
-      await emailInput.fill('alex@apiwallet.dev');
-      await page.locator('input[name="password"]').fill('ChangeMe123!');
-
-      await Promise.all([
-        page.waitForNavigation({ waitUntil: 'networkidle', timeout: 10000 }).catch(() => {}),
-        page.locator('.auth-form button[type="submit"]').click(),
-      ]);
-
-      await page.waitForTimeout(2000);
-      addLog('✅ Login submitted. Current URL: ' + page.url());
+    addLog('🔑 Creating local E2E session through the login API...');
+    const loginResponse = await context.request.post('http://localhost:3000/api/auth/login', {
+      data: { email: 'alex@apiwallet.dev', password: 'ChangeMe123!' },
+    });
+    if (!loginResponse.ok()) throw new Error(`Local E2E login failed: ${loginResponse.status()} ${await loginResponse.text()}`);
+    const sessionCookies = await context.request.storageState();
+    if (sessionCookies.cookies.length) {
+      await context.addCookies(sessionCookies.cookies.map((cookie) => ({
+        name: cookie.name,
+        value: cookie.value,
+        url: 'http://localhost:5173',
+        httpOnly: cookie.httpOnly,
+        sameSite: cookie.sameSite,
+      })));
     }
+    addLog('✅ Local E2E session created.');
+
+    const sessionCheck = await page.request.get('http://localhost:3000/api/auth/me');
+    if (!sessionCheck.ok()) throw new Error(`Local E2E session cookie was not available in the browser (${sessionCheck.status()}).`);
+    await page.goto('http://localhost:5173/app', { waitUntil: 'networkidle', timeout: 15000 });
+    await page.waitForTimeout(2000);
 
     if (!page.url().includes('/app')) {
-      await page.goto('http://localhost:5173/app', { waitUntil: 'networkidle', timeout: 15000 });
-      await page.waitForTimeout(2000);
-    }
-
-    if (!page.url().includes('/app')) {
-      throw new Error('Authentication did not establish a workspace session. The current local-login flow requires email verification before workspace tests can run.');
+      throw new Error(`Authentication did not establish a workspace session. Current URL: ${page.url()}`);
     }
 
     addLog('✅ Workspace Application loaded at: ' + page.url());
@@ -226,6 +236,7 @@ async function runE2ETests() {
     throw err;
   } finally {
     await browser.close();
+    await prisma.$disconnect();
   }
 }
 

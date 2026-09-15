@@ -123,6 +123,14 @@ async function resolveRequestVariables(request, environmentId) {
         }))
       );
     }
+    if (resolved.authorization && typeof resolved.authorization === 'object') {
+      resolved.authorization = { ...resolved.authorization };
+      for (const field of ['key', 'value', 'token', 'username', 'password']) {
+        if (typeof resolved.authorization[field] === 'string') {
+          resolved.authorization[field] = await resolveEnvironmentVariables(resolved.authorization[field], environmentId);
+        }
+      }
+    }
   }
 
   return resolved;
@@ -208,7 +216,10 @@ async function executeRequest(requestId, options = {}) {
 
   if (!request) throw fail('API Request not found', 404);
 
-  const environmentId = options.environmentId || null;
+  const environmentId = options.environmentId || (await prisma.environment.findFirst({
+    where: { projectId: request.collection.projectId, isDefault: true },
+    select: { id: true },
+  }))?.id || null;
   const flowId = options.flowId || null;
   const apiKeyId = options.apiKeyId || null;
 
