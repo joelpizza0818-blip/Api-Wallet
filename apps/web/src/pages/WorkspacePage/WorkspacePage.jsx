@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useFeedback } from '../../components/common/Feedback/FeedbackContext';
 import FlowsView from '../../features/requests/FlowsView';
 import { CollectionsView, DocumentsView, EnvironmentsView, LineHistoryView, MocksView } from '../../features/workspaces/ArtifactViewsPro';
+import DatasetsView from '../../features/workspaces/DatasetsView';
 import LeftSidebar from '../../features/requests/LeftSidebar';
 import SettingsDrawer from '../../features/settings/SettingsDrawer';
 import ApiKeysView from '../../features/secrets/ApiKeysView';
@@ -124,6 +125,7 @@ function WorkspacePage() {
       environments: { id: 'tab-environments', title: 'Entornos', type: 'environments' },
       documents: { id: 'tab-documents', title: 'Documentos', type: 'documents' },
       mocks: { id: 'tab-mocks', title: 'Mocks', type: 'mocks' },
+      datasets: { id: 'tab-datasets', title: 'Datasets', type: 'datasets' },
       history: { id: 'tab-history', title: 'Line History', type: 'history' },
     };
 
@@ -275,6 +277,7 @@ function WorkspacePage() {
             {activeView === 'collections' && <CollectionsView onSelectApi={handleSelectApi} />}
             {activeView === 'documents' && <DocumentsView />}
             {activeView === 'mocks' && <MocksView />}
+            {activeView === 'datasets' && <DatasetsView />}
             {activeView === 'history' && <LineHistoryView />}
             {activeView === 'api-detail' && selectedApi && <ApiInspector key={selectedApi.id} api={selectedApi} />}
           </div>

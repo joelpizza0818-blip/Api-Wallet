@@ -389,6 +389,9 @@ function LeftSidebar({
             <button type="button" className={`wb-footer-link ${activeView === 'mocks' ? 'wb-footer-link--active' : ''}`} onClick={() => setActiveView('mocks')}>
               › MOCKS
             </button>
+            <button type="button" className={`wb-footer-link ${activeView === 'datasets' ? 'wb-footer-link--active' : ''}`} onClick={() => setActiveView('datasets')}>
+              › DATASETS
+            </button>
             <button type="button" className={`wb-footer-link ${activeView === 'flows' ? 'wb-footer-link--active' : ''}`} onClick={() => onOpenFlowsView?.()}>
               › FLOWS ({flows.length})
             </button>

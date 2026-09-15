@@ -27,6 +27,8 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
     setAccentIntensity,
     restoreDefaultWorkspace,
     activeWorkspaceId,
+    addCollection,
+    addApi,
   } = useWorkspace();
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -65,6 +67,9 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordMsg, setPasswordMsg] = useState({ type: '', text: '' });
+  const [importMsg, setImportMsg] = useState('');
+
+  const importPostman = (event) => { const file = event.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = async () => { try { const data = JSON.parse(reader.result); const folders = data.item || []; let imported = 0; for (const folder of folders) { const collection = await addCollection(folder.name || 'Postman Collection', 'Importada desde Postman'); for (const item of (folder.item || [])) { if (!item.request) continue; const request = item.request; const url = typeof request.url === 'string' ? request.url : request.url?.raw || ''; await addApi(collection.id, { name: item.name || 'Imported request', method: request.method || 'GET', path: url || '/', url, description: item.request.description || '', headers: (request.header || []).map((header) => ({ key: header.key, value: header.value || '' })), params: [], body: typeof request.body?.raw === 'string' ? request.body.raw : '' }); imported += 1; } } setImportMsg(`Importación completada: ${imported} requests.`); } catch { setImportMsg('No se pudo importar. Selecciona un JSON de colección Postman válido.'); } }; reader.readAsText(file); event.target.value = ''; };
 
   if (!isOpen) return null;
 
@@ -323,6 +328,12 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
                     />
                   </label>
                 </div>
+              </div>
+
+              <div className="wb-settings-card">
+                <div className="wb-card-heading"><h3>Importar desde Postman</h3><p>Importa una colección JSON y sus requests al proyecto actual.</p></div>
+                <label className="btn btn--secondary btn--md" style={{ display: 'inline-flex', cursor: 'pointer' }}>Seleccionar colección JSON<input type="file" accept=".json,application/json" hidden onChange={importPostman} /></label>
+                {importMsg && <p className="wb-alert-success">{importMsg}</p>}
               </div>
 
               {/* Danger Zone: Borrar APIs y Proyecto */}

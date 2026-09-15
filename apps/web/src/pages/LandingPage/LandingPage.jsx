@@ -103,6 +103,7 @@ const FEATURES = [
 ];
 
 const GUIDE_SHOTS = [
+  { title: 'Importar desde Postman', description: 'Lleva tus colecciones y requests a API-Wallet desde un JSON de Postman.', image: '/guide/04-postman-import.svg', steps: ['Exporta la colección desde Postman como JSON.', 'Abre Settings en el Workspace y selecciona Importar desde Postman.', 'Revisa el resumen y confirma la importación de tus requests.'] },
   { title: 'Dashboard', description: 'Estadísticas y actividad del workspace.', image: '/guide/02-dashboard.png', steps: ['Revisa Projects, API Keys, APIs registradas y miembros.', 'Consulta la actividad reciente del workspace.', 'Abre el Workspace para ejecutar y organizar requests.'] },
   { title: 'Invitaciones', description: 'Invita colaboradores y gestiona roles.', image: '/guide/03-invitations.png', steps: ['Escribe el correo del colaborador.', 'Selecciona Developer, Admin, QA o Viewer.', 'Pulsa Enviar Invitación y revisa el estado pendiente.'] },
   { title: 'Configuración', description: 'Ajusta preferencias y seguridad.', image: '/guide/03-settings.png', steps: ['Abre Workspace, Teamwork o Perfil.', 'Personaliza colores y preferencias del espacio.', 'Usa las acciones de seguridad con cuidado porque pueden ser irreversibles.'] },
