@@ -30,7 +30,7 @@ const localFrontendOrigins = [
   'http://tauri.localhost',
   'https://tauri.localhost',
   'tauri://localhost',
-].filter(Boolean);
+].filter(Boolean).map((origin) => origin.replace(/\/+$/, ''));
 const stateChangingMethods = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 app.use((req, res, next) => {
   const origin = req.get('origin');
