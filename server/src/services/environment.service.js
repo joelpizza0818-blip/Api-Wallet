@@ -142,6 +142,9 @@ async function resolveEnvironmentVariables(templateText, environmentId) {
   if (env.baseUrl) {
     variableMap.set('baseUrl', env.baseUrl);
     variableMap.set('BASE_URL', env.baseUrl);
+    // Keep API_URL compatible with requests created before environments used
+    // BASE_URL as the canonical variable name.
+    variableMap.set('API_URL', env.baseUrl);
   }
 
   // Decrypt secrets into memory for substitution

@@ -6,7 +6,7 @@ API-Wallet es una plataforma web para centralizar credenciales, documentar APIs 
 
 ## Características
 
-- Autenticación local, Google OAuth y GitHub OAuth.
+- Autenticación local y GitHub OAuth.
 - Workspaces con miembros, roles, invitaciones y códigos de acceso.
 - Proyectos, entornos, colecciones y solicitudes HTTP.
 - Headers, parámetros, body y autorización Bearer, Basic, API Key y OAuth 2.0.
