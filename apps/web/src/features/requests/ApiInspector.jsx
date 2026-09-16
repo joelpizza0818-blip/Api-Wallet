@@ -3,6 +3,8 @@ import { useWorkspace } from '../workspaces/WorkspaceContext';
 import { useFeedback } from '../../components/common/Feedback/FeedbackContext';
 import './ApiInspector.css';
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
 export function parseCurlCommand(input) {
   const tokens = [...String(input || '').matchAll(/'([^']*)'|"((?:\\.|[^"\\])*)"|(\S+)/g)].map((m) => (m[1] ?? m[2]?.replace(/\\(["'\\])/g, '$1') ?? m[3]));
   if (tokens[0]?.toLowerCase() === 'curl') tokens.shift();
@@ -120,9 +122,12 @@ function ApiInspector({ api }) {
     try {
       const requestUrl = url.trim();
       if (!requestUrl) throw new Error('Introduce la URL completa del endpoint.');
-      let parsedTarget;
-      try { parsedTarget = new URL(requestUrl); } catch { throw new Error('La URL debe ser absoluta e incluir http:// o https://.'); }
-      if (!['http:', 'https:'].includes(parsedTarget.protocol)) throw new Error('La URL solo puede usar http:// o https://.');
+      const hasEnvironmentVariable = /\{\{\s*(?:API_URL|BASE_URL)\s*\}\}/i.test(requestUrl);
+      if (!hasEnvironmentVariable) {
+        let parsedTarget;
+        try { parsedTarget = new URL(requestUrl); } catch { throw new Error('La URL debe ser absoluta e incluir http:// o https://.'); }
+        if (!['http:', 'https:'].includes(parsedTarget.protocol)) throw new Error('La URL solo puede usar http:// o https://.');
+      }
       await updateApi(api.id, { authorization, preRequestScript, testScript, headers, body: bodyContent, method, path: url.startsWith('/') ? url : api.path, url, name: api.name });
       const executionResponse = await fetch(`${API_URL}/api/requests/${api.id}/execute`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
       const executionPayload = await executionResponse.json();
@@ -142,7 +147,7 @@ function ApiInspector({ api }) {
         addConsoleLog({
           type: result.ok ? 'info' : 'error',
           method,
-          url: targetUrl,
+          url: requestUrl,
           status: result.statusCode ? `${result.statusCode}` : 'Error',
           time: `${Math.round(performance.now() - startedAt)}ms`,
           size: `${new Blob([text]).size} B`,
