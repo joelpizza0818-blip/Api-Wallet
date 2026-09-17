@@ -332,7 +332,11 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
               description: typeof request.description === 'string' ? request.description : request.description?.content || '',
               headers: (request.header || []).map((header) => ({ key: header.key, value: header.value || '' })),
               params: Array.isArray(request.url?.query) ? request.url.query.map((q) => ({ key: q.key, value: q.value || '' })) : [],
-              body: typeof request.body?.raw === 'string' ? request.body.raw : '',
+              body: typeof request.body?.raw === 'string' && request.body.raw.trim()
+                ? request.body.raw
+                : Array.isArray(request.body?.urlencoded) && request.body.urlencoded.length
+                  ? JSON.stringify(request.body.urlencoded.reduce((acc, p) => ({ ...acc, [p.key]: p.value || 'sample_value' }), {}), null, 2)
+                  : '',
             });
             imported += 1;
           }

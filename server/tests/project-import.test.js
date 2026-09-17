@@ -1,28 +1,38 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { analyzeFiles, readGithubRepository, getFolderName } = require('../src/services/project-import.service');
+const {
+  analyzeFiles,
+  readGithubRepository,
+  getFolderName,
+  inferRequestBody,
+  getSampleValueForField,
+  resolveOpenApiSchema,
+} = require('../src/services/project-import.service');
 
 describe('Project importer', () => {
   it('detects fetch and Axios endpoints and resolves .env URLs without exposing secrets', () => {
     const result = analyzeFiles([
       { name: '.env', content: 'API_URL="https://api.example.com"\nAPI_TOKEN=secret-value' },
-      { name: 'src/client.js', content: 'fetch(`${API_URL}/users`); axios.post("https://api.example.com/login");' },
+      { name: 'src/client.js', content: 'fetch(`${API_URL}/users`); axios.post("https://api.example.com/login", { email: "test@example.com", password: "pwd" });' },
       { name: 'node_modules/ignored.js', content: 'fetch("https://ignored.example.com")' },
     ]);
 
     assert.equal(result.endpoints.length, 2);
     assert.equal(result.endpoints[0].url, 'https://api.example.com/users');
     assert.equal(result.endpoints[1].method, 'POST');
+    assert.ok(result.endpoints[1].body.includes('email'));
     assert.ok(!JSON.stringify(result).includes('secret-value'));
   });
 
-  it('detects Express routes, app methods, and chained routes with folder grouping', () => {
+  it('detects Express routes, app methods, and chained routes with folder grouping and body generation', () => {
     const result = analyzeFiles([
       {
         name: 'src/routes/auth.routes.js',
         content: `
           router.post('/login', authController.login);
-          router.post('/register', authController.register);
+          router.post('/register', (req, res) => {
+            const { name, email, password, role } = req.body;
+          });
           router.get('/me', authController.me);
         `,
       },
@@ -36,11 +46,19 @@ describe('Project importer', () => {
       },
     ]);
 
-    assert.equal(result.endpoints.length, 7); // login, register, me, health, get user, put user, delete user (wildcard /* filtered)
+    assert.equal(result.endpoints.length, 7);
     const loginEp = result.endpoints.find((e) => e.path === '/login');
     assert.ok(loginEp);
     assert.equal(loginEp.method, 'POST');
     assert.equal(loginEp.folderName, 'routes / Auth');
+    assert.ok(loginEp.body.includes('user@example.com'));
+    assert.ok(loginEp.headers.some((h) => h.key === 'Content-Type' && h.value === 'application/json'));
+
+    const registerEp = result.endpoints.find((e) => e.path === '/register');
+    assert.ok(registerEp);
+    assert.ok(registerEp.body.includes('name'));
+    assert.ok(registerEp.body.includes('email'));
+    assert.ok(registerEp.body.includes('password'));
 
     const healthEp = result.endpoints.find((e) => e.path === '/api/health');
     assert.ok(healthEp);
@@ -49,12 +67,39 @@ describe('Project importer', () => {
     const putUserEp = result.endpoints.find((e) => e.path === '/api/users/:id' && e.method === 'PUT');
     assert.ok(putUserEp);
     assert.equal(putUserEp.folderName, 'Users');
+    assert.ok(putUserEp.params.some((p) => p.key === 'id'));
 
     const wildcardEp = result.endpoints.find((e) => e.path === '/*' || e.path === '*');
     assert.equal(wildcardEp, undefined);
   });
 
-  it('detects OpenAPI and Postman specs and assigns proper collection tags', () => {
+  it('generates body from Zod schemas and req.body code patterns', () => {
+    const result = analyzeFiles([
+      {
+        name: 'src/controllers/product.controller.js',
+        content: `
+          const productSchema = z.object({
+            title: z.string(),
+            price: z.number(),
+            inStock: z.boolean(),
+          });
+          router.post('/api/products', (req, res) => {
+            const data = productSchema.parse(req.body);
+          });
+        `,
+      },
+    ]);
+
+    const prodEp = result.endpoints.find((e) => e.path === '/api/products');
+    assert.ok(prodEp);
+    assert.equal(prodEp.method, 'POST');
+    const parsedBody = JSON.parse(prodEp.body);
+    assert.ok(parsedBody.title);
+    assert.equal(typeof parsedBody.price, 'number');
+    assert.equal(typeof parsedBody.inStock, 'boolean');
+  });
+
+  it('detects OpenAPI and Postman specs, extracting schema bodies and tags', () => {
     const result = analyzeFiles([
       {
         name: 'docs/openapi.json',
@@ -63,7 +108,24 @@ describe('Project importer', () => {
           paths: {
             '/api/orders': {
               get: { summary: 'List orders', tags: ['Orders'] },
-              post: { summary: 'Create order', tags: ['Orders'] },
+              post: {
+                summary: 'Create order',
+                tags: ['Orders'],
+                requestBody: {
+                  content: {
+                    'application/json': {
+                      schema: {
+                        type: 'object',
+                        properties: {
+                          orderId: { type: 'string', example: 'ord_999' },
+                          totalAmount: { type: 'number', example: 150.50 },
+                          items: { type: 'array', items: { type: 'string' } },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
             },
           },
         }),
@@ -75,7 +137,14 @@ describe('Project importer', () => {
           item: [
             {
               name: 'Process Charge',
-              request: { method: 'POST', url: 'https://api.example.com/charges' },
+              request: {
+                method: 'POST',
+                url: 'https://api.example.com/charges',
+                body: {
+                  mode: 'raw',
+                  raw: JSON.stringify({ amount: 5000, currency: 'usd', customerId: 'cus_123' }),
+                },
+              },
             },
           ],
         }),
@@ -83,14 +152,20 @@ describe('Project importer', () => {
     ]);
 
     assert.equal(result.endpoints.length, 3);
-    const orderEp = result.endpoints.find((e) => e.path === '/api/orders' && e.method === 'GET');
-    assert.ok(orderEp);
-    assert.equal(orderEp.folderName, 'Orders');
+    const postOrderEp = result.endpoints.find((e) => e.path === '/api/orders' && e.method === 'POST');
+    assert.ok(postOrderEp);
+    assert.equal(postOrderEp.folderName, 'Orders');
+    const orderBody = JSON.parse(postOrderEp.body);
+    assert.equal(orderBody.orderId, 'ord_999');
+    assert.equal(orderBody.totalAmount, 150.50);
 
     const chargeEp = result.endpoints.find((e) => e.path === '/charges');
     assert.ok(chargeEp);
     assert.equal(chargeEp.method, 'POST');
     assert.equal(chargeEp.folderName, 'Payments API');
+    const chargeBody = JSON.parse(chargeEp.body);
+    assert.equal(chargeBody.amount, 5000);
+    assert.equal(chargeBody.currency, 'usd');
   });
 
   it('correctly categorizes folder names and modules with getFolderName', () => {
@@ -99,6 +174,22 @@ describe('Project importer', () => {
     assert.equal(getFolderName('server.js', '/api/chats/:chatId'), 'Chats');
     assert.equal(getFolderName('app.js', '/api/health'), 'Health');
     assert.equal(getFolderName('index.js', '/'), 'General');
+  });
+
+  it('infers realistic fallback JSON bodies for all common API patterns', () => {
+    const loginBody = JSON.parse(inferRequestBody('POST', '/api/v1/auth/login'));
+    assert.equal(loginBody.email, 'user@example.com');
+    assert.equal(loginBody.password, 'password123');
+
+    const paymentBody = JSON.parse(inferRequestBody('POST', '/api/checkout/payments'));
+    assert.equal(paymentBody.currency, 'USD');
+    assert.equal(typeof paymentBody.amount, 'number');
+
+    const chatBody = JSON.parse(inferRequestBody('POST', '/api/chat/messages'));
+    assert.ok(chatBody.content);
+
+    const getBody = inferRequestBody('GET', '/api/users');
+    assert.equal(getBody, '');
   });
 
   it('loads relevant files from a GitHub tree without making a real network call', async () => {
