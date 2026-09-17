@@ -17,16 +17,25 @@ function ProtectedRoute({ children }) {
 }
 
 function AppRouter() {
-  return <AuthProvider><FeedbackProvider><WorkspaceProvider><BrowserRouter><Routes>
-    <Route path="/" element={<LandingPage />} />
-    <Route path="/login" element={<LoginPage />} />
-    <Route path="/register" element={<RegisterPage />} />
-    <Route path="/invitations/accept" element={<InvitationAcceptPage />} />
-    <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
-    <Route path="/app" element={<ProtectedRoute><WorkspacePage /></ProtectedRoute>} />
-    <Route path="/workspace" element={<Navigate to="/app" replace />} />
-    <Route path="*" element={<ErrorPage />} />
-  </Routes></BrowserRouter></WorkspaceProvider></FeedbackProvider></AuthProvider>;
+  return (
+    <BrowserRouter>
+      <AuthProvider>
+        <FeedbackProvider>
+          <WorkspaceProvider>
+            <Routes>
+              <Route path="/" element={<LandingPage />} />
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/register" element={<RegisterPage />} />
+              <Route path="/invitations/accept" element={<InvitationAcceptPage />} />
+              <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+              <Route path="/app" element={<ProtectedRoute><WorkspacePage /></ProtectedRoute>} />
+              <Route path="/workspace" element={<Navigate to="/app" replace />} />
+              <Route path="*" element={<ErrorPage />} />
+            </Routes>
+          </WorkspaceProvider>
+        </FeedbackProvider>
+      </AuthProvider>
+    </BrowserRouter>
+  );
 }
 export default AppRouter;
-
