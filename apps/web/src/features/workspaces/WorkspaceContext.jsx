@@ -291,6 +291,57 @@ export function WorkspaceProvider({ children }) {
     setActiveWorkspaceId(workspace.id); setWorkspaceName(workspace.name || ''); await loadWorkspace(workspace.id);
     return workspace;
   };
+
+  const deleteWorkspace = async (workspaceIdToDelete) => {
+    const targetId = workspaceIdToDelete || activeWorkspaceId;
+    if (!targetId) return;
+    const response = await fetch(`${API_URL}/api/workspaces/${targetId}`, { method: 'DELETE', credentials: 'include' });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.message || 'No se pudo eliminar el workspace');
+    }
+    const remaining = workspaces.filter((w) => w.id !== targetId);
+    setWorkspaces(remaining);
+    if (remaining.length > 0) {
+      setActiveWorkspaceId(remaining[0].id);
+      setWorkspaceName(remaining[0].name || '');
+      await loadWorkspace(remaining[0].id);
+      const detailRes = await fetch(`${API_URL}/api/workspaces/${remaining[0].id}`, { credentials: 'include' }).catch(() => null);
+      if (detailRes && detailRes.ok) setWorkspaceDetails((await detailRes.json()).data);
+    } else {
+      setActiveWorkspaceId(null);
+      setWorkspaceName('');
+      setProjects([]);
+      setCollections([]);
+      setWorkspaceDetails(null);
+    }
+  };
+
+  const leaveWorkspace = async (workspaceIdToLeave) => {
+    const targetId = workspaceIdToLeave || activeWorkspaceId;
+    if (!targetId) return;
+    const response = await fetch(`${API_URL}/api/workspaces/${targetId}/leave`, { method: 'POST', credentials: 'include' });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.message || 'No se pudo abandonar el workspace');
+    }
+    const remaining = workspaces.filter((w) => w.id !== targetId);
+    setWorkspaces(remaining);
+    if (remaining.length > 0) {
+      setActiveWorkspaceId(remaining[0].id);
+      setWorkspaceName(remaining[0].name || '');
+      await loadWorkspace(remaining[0].id);
+      const detailRes = await fetch(`${API_URL}/api/workspaces/${remaining[0].id}`, { credentials: 'include' }).catch(() => null);
+      if (detailRes && detailRes.ok) setWorkspaceDetails((await detailRes.json()).data);
+    } else {
+      setActiveWorkspaceId(null);
+      setWorkspaceName('');
+      setProjects([]);
+      setCollections([]);
+      setWorkspaceDetails(null);
+    }
+  };
+
   const switchWorkspace = (id) => {
     const workspace = workspaces.find((item) => item.id === id);
     if (workspace) {
@@ -338,7 +389,7 @@ export function WorkspaceProvider({ children }) {
       collections, apiKeys, workspaceName, setWorkspaceName, workspaces,
       projects, activeWorkspaceId, activeProjectId, createWorkspace, createProject, switchWorkspace, flows, environments, workspaceDetails, createFlow,
       toggleFlowStatus, deleteFlow, runFlowNow, addApi, createBlankRequest, deleteApi,
-      addCollection, updateApi, updateCollection, deleteCollection, deleteAllApis, deleteProject,
+      addCollection, updateApi, updateCollection, deleteCollection, deleteAllApis, deleteProject, deleteWorkspace, leaveWorkspace,
       restoreDefaultWorkspace, addApiKey, deleteApiKey, regenerateInviteCode, consoleLogs, addConsoleLog, clearConsoleLogs,
     }}>
       {children}

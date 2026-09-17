@@ -442,7 +442,42 @@ async function deleteMockRoute(req, res) {
   res.status(204).end();
 }
 
+
+async function leaveWorkspace(req, res) {
+  const { workspaceId } = req.params;
+  const membership = await prisma.workspaceMember.findUnique({
+    where: { workspaceId_userId: { workspaceId, userId: req.user.id } },
+  });
+  if (!membership) throw fail('No eres miembro de este workspace', 404);
+  if (membership.role === 'OWNER') {
+    throw fail('El propietario no puede abandonar el workspace. Debes transferir la propiedad o eliminar el workspace.', 400);
+  }
+  await prisma.workspaceMember.delete({
+    where: { workspaceId_userId: { workspaceId, userId: req.user.id } },
+  });
+  respond(res, { message: 'Has abandonado el workspace correctamente' });
+}
+
+async function removeMember(req, res) {
+  const { workspaceId, userId } = req.params;
+  if (userId === req.user.id) {
+    return leaveWorkspace(req, res);
+  }
+  await requireWorkspaceRole(req.user.id, workspaceId, ADMIN_ROLES);
+  const target = await prisma.workspaceMember.findUnique({
+    where: { workspaceId_userId: { workspaceId, userId } },
+  });
+  if (!target) throw fail('Miembro no encontrado', 404);
+  if (target.role === 'OWNER') throw fail('No se puede expulsar al propietario', 400);
+  await prisma.workspaceMember.delete({
+    where: { workspaceId_userId: { workspaceId, userId } },
+  });
+  respond(res, { message: 'Miembro eliminado correctamente' });
+}
+
 module.exports = {
+  leaveWorkspace,
+  removeMember,
   listInvitations,
   listMyInvitations,
   updateMemberRole,

@@ -34,6 +34,8 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
     addApi,
     activeProjectId,
     projects,
+    deleteWorkspace,
+    leaveWorkspace,
   } = useWorkspace();
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -53,6 +55,40 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
   };
   const [teamMsg, setTeamMsg] = useState('');
   const [joinCode, setJoinCode] = useState('');
+  const [isDeletingWorkspace, setIsDeletingWorkspace] = useState(false);
+  const [isLeavingWorkspace, setIsLeavingWorkspace] = useState(false);
+
+  const currentMember = teamMembers.find((m) => m.id === user?.id || (m.email && user?.email && m.email.toLowerCase() === user.email.toLowerCase()))
+    || (workspaceDetails?.members || []).find((m) => m.userId === user?.id || (m.user?.email && user?.email && m.user.email.toLowerCase() === user.email.toLowerCase()));
+  const isOwner = currentMember ? currentMember.role === 'OWNER' : (workspaceDetails?.members?.length === 1 || true);
+
+  const handleDeleteWorkspace = async () => {
+    const wsName = workspaceDetails?.name || 'este workspace';
+    if (!window.confirm(`¿Estás seguro de que deseas eliminar permanentemente el workspace "${wsName}" y todos sus proyectos, colecciones y recursos? Esta acción NO se puede deshacer.`)) return;
+    try {
+      setIsDeletingWorkspace(true);
+      await deleteWorkspace(activeWorkspaceId);
+      onClose();
+    } catch (err) {
+      alert(err.message || 'Error al eliminar el workspace');
+    } finally {
+      setIsDeletingWorkspace(false);
+    }
+  };
+
+  const handleLeaveWorkspace = async () => {
+    const wsName = workspaceDetails?.name || 'este workspace';
+    if (!window.confirm(`¿Estás seguro de que deseas salir de "${wsName}"? Ya no tendrás acceso a sus proyectos ni colecciones.`)) return;
+    try {
+      setIsLeavingWorkspace(true);
+      await leaveWorkspace(activeWorkspaceId);
+      onClose();
+    } catch (err) {
+      alert(err.message || 'Error al salir del workspace');
+    } finally {
+      setIsLeavingWorkspace(false);
+    }
+  };
 
   useEffect(() => {
     if (!isOpen || !activeWorkspaceId) return;
@@ -651,6 +687,27 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
                     </button>
                   </div>
 
+                  {isOwner && (
+                    <div className="wb-danger-row">
+                      <div className="wb-danger-row-info">
+                        <strong>Borrar workspace completo</strong>
+                        <p>Elimina permanentemente este espacio de trabajo, todos sus proyectos, APIs y datos.</p>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn-danger-solid"
+                        onClick={handleDeleteWorkspace}
+                        disabled={isDeletingWorkspace}
+                      >
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2">
+                          <polyline points="3 6 5 6 21 6" />
+                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                        </svg>
+                        {isDeletingWorkspace ? 'Borrando…' : 'Borrar Workspace'}
+                      </button>
+                    </div>
+                  )}
+
                   <div className="wb-danger-row wb-restore-row">
                     <div className="wb-danger-row-info">
                       <strong>Restaurar datos de demostración</strong>
@@ -798,6 +855,45 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
                   </button>
                 </form>
               </div>
+
+              {/* Leave Workspace Button (only for non-owners) */}
+              {!isOwner && (
+                <div className="wb-settings-card wb-danger-card" style={{ marginTop: 16 }}>
+                  <div className="wb-card-heading">
+                    <div className="wb-danger-badge">
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                        <polyline points="16 17 21 12 16 7" />
+                        <line x1="21" y1="12" x2="9" y2="12" />
+                      </svg>
+                      Zona de Peligro
+                    </div>
+                    <h3>Abandonar este Workspace</h3>
+                    <p>Perderás acceso a los proyectos, colecciones y recursos compartidos de este equipo.</p>
+                  </div>
+                  <div className="wb-danger-actions">
+                    <div className="wb-danger-row">
+                      <div className="wb-danger-row-info">
+                        <strong>Salir del equipo</strong>
+                        <p>Dejarás de ser colaborador en este espacio de trabajo.</p>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn-danger-solid"
+                        onClick={handleLeaveWorkspace}
+                        disabled={isLeavingWorkspace}
+                      >
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                          <polyline points="16 17 21 12 16 7" />
+                          <line x1="21" y1="12" x2="9" y2="12" />
+                        </svg>
+                        {isLeavingWorkspace ? 'Saliendo…' : 'Salir del Workspace'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
