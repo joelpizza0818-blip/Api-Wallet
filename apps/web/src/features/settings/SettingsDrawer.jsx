@@ -79,21 +79,69 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
   const [projectImporting, setProjectImporting] = useState(false);
 
   const importProject = async ({ files, repositoryUrl = '' }) => {
+    const targetLabel = repositoryUrl || (files?.length ? `Carpeta local (${files.length} archivos)` : 'Proyecto');
+    setAnalysisModal({
+      isOpen: true,
+      status: 'analyzing',
+      targetName: targetLabel,
+      stepIndex: 0,
+      message: 'Leyendo estructura y archivos del proyecto...',
+      error: '',
+      collectionsCount: 0,
+      importedCount: 0,
+    });
     setProjectImporting(true);
-    setImportMsg('Analizando el proyecto…');
+
+    const stepTimer1 = setTimeout(() => {
+      setAnalysisModal((prev) => prev.isOpen && prev.status === 'analyzing' ? { ...prev, stepIndex: 1, message: 'Analizando rutas, métodos HTTP y controladores...' } : prev);
+    }, 1100);
+
+    const stepTimer2 = setTimeout(() => {
+      setAnalysisModal((prev) => prev.isOpen && prev.status === 'analyzing' ? { ...prev, stepIndex: 2, message: 'Generando colecciones y requests en Api-Wallet...' } : prev);
+    }, 2400);
+
     try {
+      const targetProjectId = activeProjectId || projects?.[0]?.id;
       const response = await fetch(`${API_URL}/api/workspaces/${activeWorkspaceId}/import-project`, {
-        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(repositoryUrl ? { githubUrl: repositoryUrl, projectId: activeProjectId } : { files, projectId: activeProjectId }),
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(repositoryUrl ? { githubUrl: repositoryUrl, projectId: targetProjectId } : { files, projectId: targetProjectId }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.message || 'No se pudo analizar el proyecto.');
-      const { imported, filesAnalyzed, configKeys } = result.data;
-      setImportMsg(`Análisis completo: ${imported} endpoints importados desde ${filesAnalyzed} archivos${configKeys.length ? `; ${configKeys.length} variables de configuración detectadas` : ''}.`);
+
+      clearTimeout(stepTimer1);
+      clearTimeout(stepTimer2);
+
+      const { imported, filesAnalyzed, collections, configKeys } = result.data || {};
+      const colCount = collections?.length || 1;
+
+      setAnalysisModal({
+        isOpen: true,
+        status: 'success',
+        targetName: targetLabel,
+        stepIndex: 3,
+        message: '¡Análisis completado con éxito!',
+        error: '',
+        importedCount: imported || 0,
+        collectionsCount: colCount,
+        filesAnalyzedCount: filesAnalyzed || 0,
+        configKeysCount: configKeys?.length || 0,
+      });
+
       setGithubUrl('');
-      setTimeout(() => window.location.reload(), 900);
+      setTimeout(() => {
+        window.location.reload();
+      }, 1600);
     } catch (error) {
-      setImportMsg(error.message);
+      clearTimeout(stepTimer1);
+      clearTimeout(stepTimer2);
+      setAnalysisModal((prev) => ({
+        ...prev,
+        status: 'error',
+        error: error.message || 'Ocurrió un error al procesar el proyecto.',
+      }));
     } finally {
       setProjectImporting(false);
     }
@@ -127,7 +175,76 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
     if (githubUrl.trim()) importProject({ repositoryUrl: githubUrl.trim() });
   };
 
-  const importPostman = (event) => { const file = event.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = async () => { try { const data = JSON.parse(reader.result); const folders = data.item || []; let imported = 0; for (const folder of folders) { const collection = await addCollection(folder.name || 'Postman Collection', 'Importada desde Postman'); for (const item of (folder.item || [])) { if (!item.request) continue; const request = item.request; const url = typeof request.url === 'string' ? request.url : request.url?.raw || ''; await addApi(collection.id, { name: item.name || 'Imported request', method: request.method || 'GET', path: url || '/', url, description: item.request.description || '', headers: (request.header || []).map((header) => ({ key: header.key, value: header.value || '' })), params: [], body: typeof request.body?.raw === 'string' ? request.body.raw : '' }); imported += 1; } } setImportMsg(`Importación completada: ${imported} requests.`); } catch { setImportMsg('No se pudo importar. Selecciona un JSON de colección Postman válido.'); } }; reader.readAsText(file); event.target.value = ''; };
+  const importPostman = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const data = JSON.parse(reader.result);
+        const extractRequests = (items, currentFolder = 'Postman Collection') => {
+          const result = [];
+          for (const item of items) {
+            if (item.request) {
+              result.push({ folderName: currentFolder, item });
+            } else if (Array.isArray(item.item)) {
+              result.push(...extractRequests(item.item, item.name || currentFolder));
+            }
+          }
+          return result;
+        };
+
+        const allItems = Array.isArray(data.item)
+          ? extractRequests(data.item, data.info?.name || 'Postman Collection')
+          : [];
+
+        if (!allItems.length) {
+          setImportMsg('No se encontraron requests válidos en la colección.');
+          return;
+        }
+
+        const groups = {};
+        for (const entry of allItems) {
+          groups[entry.folderName] = groups[entry.folderName] || [];
+          groups[entry.folderName].push(entry.item);
+        }
+
+        let imported = 0;
+        for (const [folderName, reqItems] of Object.entries(groups)) {
+          const collection = await addCollection(folderName, 'Importada desde Postman');
+          for (const item of reqItems) {
+            const request = item.request;
+            const rawUrl = typeof request.url === 'string'
+              ? request.url
+              : (request.url?.raw || (Array.isArray(request.url?.path) ? `/${request.url.path.join('/')}` : ''));
+            let pathname = rawUrl;
+            try {
+              if (rawUrl.startsWith('http')) pathname = new URL(rawUrl).pathname;
+            } catch {
+              pathname = rawUrl;
+            }
+            await addApi(collection.id, {
+              name: item.name || `${request.method || 'GET'} ${pathname || '/'}`,
+              method: (request.method || 'GET').toUpperCase(),
+              path: pathname || '/',
+              url: rawUrl || '',
+              description: typeof request.description === 'string' ? request.description : request.description?.content || '',
+              headers: (request.header || []).map((header) => ({ key: header.key, value: header.value || '' })),
+              params: Array.isArray(request.url?.query) ? request.url.query.map((q) => ({ key: q.key, value: q.value || '' })) : [],
+              body: typeof request.body?.raw === 'string' ? request.body.raw : '',
+            });
+            imported += 1;
+          }
+        }
+        setImportMsg(`Importación completada: ${imported} requests importados.`);
+        setTimeout(() => window.location.reload(), 1200);
+      } catch (err) {
+        setImportMsg(err.message || 'No se pudo importar. Selecciona un JSON de colección Postman válido.');
+      }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+  };
 
   if (!isOpen) return null;
 

@@ -5,21 +5,112 @@ const { analyzeFiles, readGithubRepository } = require('../services/project-impo
 async function importProject(req, res) {
   const { workspaceId } = req.params;
   await requireWorkspaceRole(req.user.id, workspaceId, WRITE_ROLES);
-  const project = req.body.projectId
+
+  let project = req.body.projectId
     ? await prisma.project.findFirst({ where: { id: req.body.projectId, workspaceId } })
     : await prisma.project.findFirst({ where: { workspaceId }, orderBy: { updatedAt: 'desc' } });
-  if (!project) throw Object.assign(new Error('El workspace no tiene un proyecto activo.'), { statusCode: 400 });
+
+  if (!project) {
+    project = await prisma.project.create({
+      data: {
+        workspaceId,
+        name: 'Proyecto Principal',
+        description: 'Proyecto creado automáticamente para importar APIs',
+      },
+    });
+  }
+
   await projectAccess(req.user.id, project.id, WRITE_ROLES);
 
-  const files = Array.isArray(req.body.files) ? req.body.files : req.body.githubUrl ? await readGithubRepository(req.body.githubUrl) : [];
-  if (!files.length) throw Object.assign(new Error('Selecciona una carpeta o indica un repositorio GitHub.'), { statusCode: 400 });
-  const analysis = analyzeFiles(files);
-  let collection = null;
-  for (const endpoint of analysis.endpoints) {
-    if (!collection) collection = await prisma.collection.create({ data: { projectId: project.id, name: 'Detectadas desde proyecto', description: 'Endpoints encontrados en el código y configuración del proyecto' } });
-    await prisma.apiRequest.create({ data: { collectionId: collection.id, name: endpoint.name, method: endpoint.method, path: endpoint.path, url: endpoint.url, description: endpoint.description, headers: endpoint.headers, params: endpoint.params, body: endpoint.body } });
+  const files = Array.isArray(req.body.files)
+    ? req.body.files
+    : req.body.githubUrl
+      ? await readGithubRepository(req.body.githubUrl)
+      : [];
+
+  if (!files.length) {
+    throw Object.assign(new Error('Selecciona una carpeta con código o indica la URL de un repositorio GitHub público.'), { statusCode: 400 });
   }
-  res.status(201).json({ success: true, data: { ...analysis, collectionId: collection?.id || null, imported: analysis.endpoints.length } });
+
+  const analysis = analyzeFiles(files);
+
+  if (!analysis.endpoints.length) {
+    return res.status(200).json({
+      success: true,
+      data: {
+        ...analysis,
+        collectionId: null,
+        imported: 0,
+        message: 'Se analizaron los archivos pero no se detectaron endpoints de rutas o clientes HTTP.',
+      },
+    });
+  }
+
+  // Group endpoints by their respective folder/module collection name
+  const grouped = {};
+  for (const ep of analysis.endpoints) {
+    const colName = ep.folderName || 'General';
+    if (!grouped[colName]) grouped[colName] = [];
+    grouped[colName].push(ep);
+  }
+
+  let totalImported = 0;
+  const createdCollections = [];
+
+  for (const [colName, endpoints] of Object.entries(grouped)) {
+    let collection = await prisma.collection.findFirst({
+      where: { projectId: project.id, name: colName },
+    });
+
+    if (!collection) {
+      collection = await prisma.collection.create({
+        data: {
+          projectId: project.id,
+          name: colName,
+          description: `Colección importada para el módulo/carpeta ${colName}`,
+        },
+      });
+    }
+
+    createdCollections.push({ id: collection.id, name: collection.name, count: endpoints.length });
+
+    const existingRequests = await prisma.apiRequest.findMany({
+      where: { collectionId: collection.id },
+      select: { method: true, path: true },
+    });
+    const existingSet = new Set(existingRequests.map((r) => `${r.method}:${r.path}`));
+
+    for (const endpoint of endpoints) {
+      const key = `${endpoint.method}:${endpoint.path}`;
+      if (!existingSet.has(key)) {
+        await prisma.apiRequest.create({
+          data: {
+            collectionId: collection.id,
+            name: endpoint.name,
+            method: endpoint.method,
+            path: endpoint.path,
+            url: endpoint.url,
+            description: endpoint.description,
+            headers: endpoint.headers || [],
+            params: endpoint.params || [],
+            body: endpoint.body || '',
+          },
+        });
+        existingSet.add(key);
+        totalImported++;
+      }
+    }
+  }
+
+  res.status(201).json({
+    success: true,
+    data: {
+      ...analysis,
+      collections: createdCollections,
+      imported: totalImported,
+      totalEndpointsDetected: analysis.endpoints.length,
+    },
+  });
 }
 
 module.exports = { importProject };
