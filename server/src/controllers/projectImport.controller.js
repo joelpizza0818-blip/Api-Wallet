@@ -127,9 +127,9 @@ async function applyBaseUrl(req, res) {
   }
 
   // Normalise: strip trailing slash
-  const base = baseUrl.replace(/\/+$/, '');
+  const base = baseUrl.trim().replace(/\/+$/, '');
 
-  // Update every request in those collections that doesn't already have a full URL
+  // Update every request in those collections
   const requests = await prisma.apiRequest.findMany({
     where: { collectionId: { in: collectionIds } },
     select: { id: true, url: true, path: true },
@@ -137,10 +137,27 @@ async function applyBaseUrl(req, res) {
 
   let updated = 0;
   for (const r of requests) {
-    // Only prepend if url is empty / relative (no http:// or https://)
-    const currentUrl = r.url || r.path || '';
-    if (/^https?:\/\//i.test(currentUrl)) continue; // already absolute – skip
-    const newUrl = base + (currentUrl.startsWith('/') ? currentUrl : '/' + currentUrl);
+    let currentUrl = (r.url || r.path || '').trim();
+    let cleanSubPath = currentUrl;
+
+    if (cleanSubPath.includes('{{baseUrl}}')) {
+      cleanSubPath = cleanSubPath.replace(/\{\{baseUrl\}\}\/?/gi, '');
+    } else if (/^https?:\/\//i.test(cleanSubPath)) {
+      try {
+        const u = new URL(cleanSubPath);
+        cleanSubPath = u.pathname + u.search;
+      } catch {
+        cleanSubPath = cleanSubPath.replace(/^https?:\/\/[^/]+/i, '');
+      }
+    }
+
+    if (!cleanSubPath.startsWith('/')) {
+      cleanSubPath = '/' + cleanSubPath;
+    }
+
+    let newUrl = base + cleanSubPath;
+    newUrl = newUrl.replace(/([^:])\/{2,}/g, '$1/');
+
     await prisma.apiRequest.update({
       where: { id: r.id },
       data: { url: newUrl },

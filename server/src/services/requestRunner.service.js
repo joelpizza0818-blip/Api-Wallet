@@ -143,14 +143,22 @@ async function buildRequest(request, environmentId = null) {
   const resolved = await resolveRequestVariables(request, environmentId);
 
   // Construct target URL
-  let fullUrl = resolved.url;
-  if (!fullUrl && resolved.path) {
-    if (environmentId) {
-      const env = await prisma.environment.findUnique({ where: { id: environmentId } });
-      if (env?.baseUrl) {
-        fullUrl = `${env.baseUrl.replace(/\/$/, '')}/${resolved.path.replace(/^\//, '')}`;
+  let fullUrl = resolved.url || resolved.path;
+  if (environmentId) {
+    const env = await prisma.environment.findUnique({ where: { id: environmentId } });
+    if (env?.baseUrl) {
+      const base = env.baseUrl.replace(/\/+$/, '');
+      if (!fullUrl) {
+        fullUrl = base;
+      } else if (fullUrl.includes('{{baseUrl}}')) {
+        fullUrl = fullUrl.replace(/\{\{baseUrl\}\}\/?/g, base + '/');
+      } else if (fullUrl.startsWith('/')) {
+        fullUrl = `${base}${fullUrl}`;
       }
     }
+  }
+  if (fullUrl && fullUrl.includes('{{baseUrl}}')) {
+    fullUrl = fullUrl.replace(/\{\{baseUrl\}\}\/?/g, '');
   }
 
   if (!fullUrl) {
