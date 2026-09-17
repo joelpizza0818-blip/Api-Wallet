@@ -32,6 +32,8 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
     workspaceDetails,
     addCollection,
     addApi,
+    activeProjectId,
+    projects,
   } = useWorkspace();
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
