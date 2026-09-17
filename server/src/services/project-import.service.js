@@ -352,8 +352,13 @@ function analyzeFiles(inputFiles) {
 }
 
 async function readGithubRepository(repositoryUrl) {
-  const match = repositoryUrl.match(/^https?:\/\/github\.com\/([^/]+)\/([^/#]+?)(?:\.git)?(?:[/?#].*)?$/i);
-  if (!match) throw Object.assign(new Error('Usa una URL válida de repositorio GitHub (ej: https://github.com/usuario/repo).'), { statusCode: 400 });
+  if (!repositoryUrl || typeof repositoryUrl !== 'string') {
+    throw Object.assign(new Error('Indica la URL de un repositorio GitHub.'), { statusCode: 400 });
+  }
+  const match = repositoryUrl.trim().match(/^(?:https?:\/\/)?(?:www\.)?github\.com\/([^/]+)\/([^/#]+?)(?:\.git)?(?:[/?#].*)?$/i);
+  if (!match) {
+    throw Object.assign(new Error('Usa una URL válida de repositorio GitHub (ej: https://github.com/usuario/repo).'), { statusCode: 400 });
+  }
   const [, owner, repo] = match;
   const headers = { Accept: 'application/vnd.github+json', 'User-Agent': 'api-wallet-importer' };
   if (process.env.GITHUB_TOKEN) headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
@@ -366,7 +371,8 @@ async function readGithubRepository(repositoryUrl) {
   const files = [];
   for (const blob of blobs) {
     if (blob.size > MAX_FILE_BYTES) continue;
-    const response = await fetch(`https://raw.githubusercontent.com/${owner}/${repo}/HEAD/${blob.path}`, { headers: { 'User-Agent': 'api-wallet-importer' } });
+    const encodedPath = blob.path.split('/').map(encodeURIComponent).join('/');
+    const response = await fetch(`https://raw.githubusercontent.com/${owner}/${repo}/HEAD/${encodedPath}`, { headers: { 'User-Agent': 'api-wallet-importer' } });
     if (response.ok) files.push({ name: blob.path, content: await response.text() });
   }
   return files;
