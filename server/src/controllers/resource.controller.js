@@ -35,13 +35,34 @@ async function listWorkspaces(req, res) {
   );
 }
 
+async function listPublicProjects(_req, res) {
+  page(res, await prisma.project.findMany({
+    where: { workspace: { visibility: 'PUBLIC' } },
+    select: { id: true, name: true, description: true, updatedAt: true, workspace: { select: { id: true, name: true, description: true } }, _count: { select: { collections: true } } },
+    orderBy: { updatedAt: 'desc' },
+  }));
+}
+
+async function accessPublicProject(req, res) {
+  const project = await prisma.project.findUnique({ where: { id: req.params.projectId }, select: { id: true, workspaceId: true, workspace: { select: { visibility: true, name: true } } } });
+  if (!project || project.workspace.visibility !== 'PUBLIC') throw fail('Proyecto público no encontrado', 404);
+  await prisma.workspaceMember.upsert({
+    where: { workspaceId_userId: { workspaceId: project.workspaceId, userId: req.user.id } },
+    update: {},
+    create: { workspaceId: project.workspaceId, userId: req.user.id, role: 'VIEWER', status: 'ACTIVE' },
+  });
+  page(res, { projectId: project.id, workspaceId: project.workspaceId, workspaceName: project.workspace.name, role: 'VIEWER' });
+}
+
 async function createWorkspace(req, res) {
   checkName(req.body.name);
+  const visibility = ['personal', 'team', 'public'].includes(req.body.visibility) ? req.body.visibility.toUpperCase() : 'TEAM';
   const workspace = await prisma.workspace.create({
     data: {
       name: clean(req.body.name),
       slug: slug(req.body.slug || req.body.name),
       description: clean(req.body.description) || null,
+      visibility,
       ownerId: req.user.id,
       members: { create: { userId: req.user.id, role: 'OWNER' } },
       projects: { create: { name: 'Default Project', description: 'Proyecto inicial del workspace' } },
@@ -83,6 +104,7 @@ async function updateWorkspace(req, res) {
         ...(req.body.name && { name: clean(req.body.name) }),
         ...(req.body.description !== undefined && { description: clean(req.body.description) }),
         ...(inviteCode && { inviteCode }),
+        ...( ['PERSONAL', 'TEAM', 'PUBLIC'].includes(String(req.body.visibility || '').toUpperCase()) && { visibility: String(req.body.visibility).toUpperCase() }),
       },
     })
   );
@@ -421,6 +443,8 @@ async function revokeApiKey(req, res) {
 }
 
 module.exports = {
+  listPublicProjects,
+  accessPublicProject,
   listWorkspaces,
   createWorkspace,
   getWorkspace,

@@ -29,6 +29,7 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
     setAccentIntensity,
     restoreDefaultWorkspace,
     activeWorkspaceId,
+    workspaceDetails,
     addCollection,
     addApi,
   } = useWorkspace();
@@ -44,6 +45,10 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
   const [teamMembers, setTeamMembers] = useState([]);
   const [newMemberEmail, setNewMemberEmail] = useState('');
   const [newMemberRole, setNewMemberRole] = useState('API Developer');
+  const handleRoleChange = async (userId, role) => {
+    const response = await fetch(`${API_URL}/api/workspaces/${activeWorkspaceId}/members/${userId}`, { method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role }) });
+    if (response.ok) setTeamMembers((items) => items.map((member) => member.id === userId ? { ...member, role } : member));
+  };
   const [teamMsg, setTeamMsg] = useState('');
   const [joinCode, setJoinCode] = useState('');
 
@@ -70,6 +75,57 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordMsg, setPasswordMsg] = useState({ type: '', text: '' });
   const [importMsg, setImportMsg] = useState('');
+  const [githubUrl, setGithubUrl] = useState('');
+  const [projectImporting, setProjectImporting] = useState(false);
+
+  const importProject = async ({ files, repositoryUrl = '' }) => {
+    setProjectImporting(true);
+    setImportMsg('Analizando el proyecto…');
+    try {
+      const response = await fetch(`${API_URL}/api/workspaces/${activeWorkspaceId}/import-project`, {
+        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(repositoryUrl ? { githubUrl: repositoryUrl, projectId: activeProjectId } : { files, projectId: activeProjectId }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || 'No se pudo analizar el proyecto.');
+      const { imported, filesAnalyzed, configKeys } = result.data;
+      setImportMsg(`Análisis completo: ${imported} endpoints importados desde ${filesAnalyzed} archivos${configKeys.length ? `; ${configKeys.length} variables de configuración detectadas` : ''}.`);
+      setGithubUrl('');
+      setTimeout(() => window.location.reload(), 900);
+    } catch (error) {
+      setImportMsg(error.message);
+    } finally {
+      setProjectImporting(false);
+    }
+  };
+
+  const importProjectFolder = async (event) => {
+    const supportedExtensions = new Set(['.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs', '.vue', '.svelte', '.py', '.go', '.java', '.rb', '.php', '.json', '.yml', '.yaml', '.env']);
+    const selectedFiles = [...(event.target.files || [])].filter((file) => {
+      const parts = (file.webkitRelativePath || file.name).split('/');
+      return !parts.some((part) => ['node_modules', '.git', 'dist', 'build', 'target', 'coverage', '.next'].includes(part))
+        && (supportedExtensions.has(`.${file.name.split('.').pop().toLowerCase()}`) || file.name.startsWith('.env'))
+        && file.size <= 200000;
+    }).slice(0, 300);
+    event.target.value = '';
+    if (!selectedFiles.length) return;
+    try {
+      const files = await Promise.all(selectedFiles.map((file) => new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve({ name: file.webkitRelativePath || file.name, content: reader.result });
+        reader.onerror = () => reject(new Error(`No se pudo leer ${file.name}.`));
+        reader.readAsText(file);
+      })));
+      await importProject({ files });
+    } catch (error) {
+      setImportMsg(error.message);
+    }
+  };
+
+  const importGithubProject = (event) => {
+    event.preventDefault();
+    if (githubUrl.trim()) importProject({ repositoryUrl: githubUrl.trim() });
+  };
 
   const importPostman = (event) => { const file = event.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = async () => { try { const data = JSON.parse(reader.result); const folders = data.item || []; let imported = 0; for (const folder of folders) { const collection = await addCollection(folder.name || 'Postman Collection', 'Importada desde Postman'); for (const item of (folder.item || [])) { if (!item.request) continue; const request = item.request; const url = typeof request.url === 'string' ? request.url : request.url?.raw || ''; await addApi(collection.id, { name: item.name || 'Imported request', method: request.method || 'GET', path: url || '/', url, description: item.request.description || '', headers: (request.header || []).map((header) => ({ key: header.key, value: header.value || '' })), params: [], body: typeof request.body?.raw === 'string' ? request.body.raw : '' }); imported += 1; } } setImportMsg(`Importación completada: ${imported} requests.`); } catch { setImportMsg('No se pudo importar. Selecciona un JSON de colección Postman válido.'); } }; reader.readAsText(file); event.target.value = ''; };
 
@@ -373,6 +429,22 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
                 {importMsg && <p className="wb-alert-success">{importMsg}</p>}
               </div>
 
+              <div className="wb-settings-card">
+                <div className="wb-card-heading">
+                  <h3>Analizar proyecto</h3>
+                  <p>Lee el código y la configuración para encontrar APIs externas y crear sus requests.</p>
+                </div>
+                <label className="btn btn--secondary btn--md wb-import-folder-btn">
+                  Seleccionar carpeta del proyecto
+                  <input type="file" hidden webkitdirectory="true" directory="true" multiple onChange={importProjectFolder} disabled={projectImporting} />
+                </label>
+                <form className="wb-github-import-form" onSubmit={importGithubProject}>
+                  <input type="url" placeholder="https://github.com/organizacion/repositorio" value={githubUrl} onChange={(event) => setGithubUrl(event.target.value)} disabled={projectImporting} aria-label="URL del repositorio GitHub" />
+                  <button type="submit" className="btn btn--primary btn--md" disabled={projectImporting || !githubUrl.trim()}>{projectImporting ? 'Analizando…' : 'Analizar GitHub'}</button>
+                </form>
+                {importMsg && <p className={importMsg.startsWith('Análisis') || importMsg.startsWith('Importación') ? 'wb-alert-success' : 'wb-alert-error'}>{importMsg}</p>}
+              </div>
+
               {/* Danger Zone: Borrar APIs y Proyecto */}
               <div className="wb-settings-card wb-danger-card">
                 <div className="wb-card-heading">
@@ -467,6 +539,7 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
                       type="button"
                       className={`btn btn--primary btn--sm ${codeCopied ? 'btn--copied' : ''}`}
                       onClick={handleCopyCode}
+                      disabled={workspaceDetails?.visibility === 'PERSONAL'}
                     >
                       {codeCopied ? '✓ ¡Copiado!' : 'Copiar Código'}
                     </button>
@@ -474,6 +547,7 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
                       type="button"
                       className="btn btn--secondary btn--sm"
                       onClick={handleRegenerateCode}
+                      disabled={workspaceDetails?.visibility === 'PERSONAL'}
                       title="Generar un nuevo código aleatorio"
                     >
                       Regenerar
@@ -520,9 +594,7 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
                           <span className="wb-member-email">{member.email}</span>
                         </div>
                       </div>
-                      <span className={`wb-team-role-badge ${member.badge}`}>
-                        {member.role}
-                      </span>
+                      <select className={`wb-team-role-badge ${member.badge}`} value={member.role} onChange={(event) => handleRoleChange(member.id, event.target.value)} disabled={member.role === 'OWNER'} aria-label={`Rol de ${member.name}`}><option value="VIEWER">VIEWER</option><option value="DEVELOPER">DEVELOPER</option><option value="QA">QA</option><option value="ADMIN">ADMIN</option></select>
                     </div>
                   ))}
                 </div>

@@ -506,7 +506,7 @@ export function NewWorkspaceModal({ isOpen, onClose, onWorkspaceCreated }) {
     e.preventDefault();
     if (!name.trim()) return;
     try {
-      const newWs = await createWorkspace({ name, description });
+      const newWs = await createWorkspace({ name, description, visibility });
       if (onWorkspaceCreated) onWorkspaceCreated(newWs);
       setName('');
       setDescription('');

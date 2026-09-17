@@ -52,6 +52,7 @@ function DashboardPage() {
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [projectForm, setProjectForm] = useState({ name: '', description: '' });
   const [projectError, setProjectError] = useState('');
+  const [publicProjects, setPublicProjects] = useState([]);
 
   // Invite state
   const [inviteEmail, setInviteEmail] = useState('');
@@ -59,6 +60,7 @@ function DashboardPage() {
   const [invitations, setInvitations] = useState([]);
   const [myInvitations, setMyInvitations] = useState([]);
   const members = workspaceDetails?.members || [];
+  useEffect(() => { fetch(`${API_URL}/api/public/projects`).then(async (response) => { if (response.ok) setPublicProjects((await response.json()).data || []); }).catch(() => {}); }, []);
   const allApis = useMemo(() => collections.flatMap((collection) => (collection.apis || []).map((api) => ({ ...api, collectionName: collection.name }))), [collections]);
 
   useEffect(() => {
@@ -102,6 +104,14 @@ function DashboardPage() {
     window.location.reload();
   };
 
+  const handleOpenPublicProject = async (projectId) => {
+    const response = await fetch(`${API_URL}/api/public/projects/${projectId}/access`, { method: 'POST', credentials: 'include' });
+    const result = await response.json();
+    if (!response.ok) { notify(result.message || 'No se pudo abrir el proyecto.', 'error'); return; }
+    notify('Acceso concedido como Viewer. Un administrador puede ascender tu rol desde Workspace Settings.');
+    window.location.reload();
+  };
+
   return (
     <div className="dash-container">
       {/* ── Top Bar ────────────────────────────────────────────── */}
@@ -137,6 +147,10 @@ function DashboardPage() {
                 <path d="M13.73 21a2 2 0 0 1-3.46 0" />
               </svg>
               {(invitations.length + myInvitations.length) > 0 && <span className="dash-notif-badge">{invitations.length + myInvitations.length}</span>}
+            </button>
+
+            <button type="button" className={`dash-nav-item ${activeNav === 'public-projects' ? 'dash-nav-item--active' : ''}`} onClick={() => setActiveNav('public-projects')}>
+              <DashboardIcon name="folder" /><span>Proyectos públicos</span><span className="dash-nav-badge">{publicProjects.length}</span>
             </button>
 
             {notificationsOpen && (
@@ -486,6 +500,10 @@ function DashboardPage() {
                 ))}
               </div>
             </div>
+          )}
+
+          {activeNav === 'public-projects' && (
+            <div className="dash-content-pane"><div className="dash-pane-header"><div><span className="dash-eyebrow">Comunidad</span><h1>Proyectos públicos</h1><p>Explora proyectos publicados por otros usuarios.</p></div></div><div className="dash-projects-grid">{publicProjects.length === 0 ? <div className="dash-card-box"><p>Aún no hay proyectos públicos.</p></div> : publicProjects.map((project) => <div className="dash-project-card" key={project.id}><div className="dash-project-card__top"><h3>{project.name}</h3><span className="dash-project-card__badge">Público · Viewer</span></div><p>{project.description || 'Sin descripción'}</p><small>{project.workspace.name} · {project._count.collections} colecciones</small><button type="button" className="btn btn--primary btn--sm" onClick={() => handleOpenPublicProject(project.id)}>Abrir proyecto</button></div>)}</div></div>
           )}
 
           {isProjectModalOpen && (

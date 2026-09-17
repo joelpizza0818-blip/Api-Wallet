@@ -1,10 +1,14 @@
 const express = require('express');
 const c = require('../controllers/resource.controller');
+const projectImport = require('../controllers/projectImport.controller');
 const { requireAuth } = require('../middleware/auth.middleware');
 const router = express.Router();
+router.get('/public/projects', c.listPublicProjects);
 router.use(requireAuth);
+router.post('/public/projects/:projectId/access', c.accessPublicProject);
 router.route('/workspaces').get(c.listWorkspaces).post(c.createWorkspace);
 router.route('/workspaces/:workspaceId').get(c.getWorkspace).patch(c.updateWorkspace).delete(c.removeWorkspace);
+router.post('/workspaces/:workspaceId/import-project', projectImport.importProject);
 router.route('/workspaces/:workspaceId/projects').get(c.listProjects).post(c.createProject);
 router.route('/projects/:projectId').get(c.getProject).patch(c.updateProject).delete(c.removeProject);
 router.route('/projects/:projectId/collections').get(c.listCollections).post(c.createCollection);

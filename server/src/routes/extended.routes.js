@@ -2,6 +2,7 @@ const express = require('express');
 const c = require('../controllers/extended.controller');
 const { requireAuth } = require('../middleware/auth.middleware');
 const router = express.Router(); router.use(requireAuth);
+router.patch('/workspaces/:workspaceId/members/:userId', c.updateMemberRole);
 router.route('/workspaces/:workspaceId/invitations').get(c.listInvitations).post(c.invite);
 router.get('/invitations/mine', c.listMyInvitations); router.delete('/invitations/:invitationId', c.cancelInvitation); router.post('/invitations/accept', c.acceptInvitation); router.post('/invitations/:invitationId/accept', c.acceptInvitationById); router.post('/workspaces/join-code', c.joinWorkspaceByCode);
 router.route('/projects/:projectId/flows').get(c.listFlows).post(c.createFlow); router.route('/flows/:flowId').patch(c.updateFlow).delete(c.removeFlow); router.post('/flows/:flowId/run', c.runFlowNow);

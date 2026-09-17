@@ -51,6 +51,8 @@ async function listMyInvitations(req, res) {
 
 async function invite(req, res) {
   await requireWorkspaceRole(req.user.id, req.params.workspaceId, ADMIN_ROLES);
+  const targetWorkspace = await prisma.workspace.findUnique({ where: { id: req.params.workspaceId }, select: { visibility: true } });
+  if (targetWorkspace?.visibility === 'PERSONAL') throw fail('Este workspace es personal y no acepta invitaciones', 403);
   const email = req.body.email?.trim().toLowerCase();
   if (!email || !/^\S+@\S+\.\S+$/.test(email)) throw fail('A valid email is required');
   if (!['ADMIN', 'DEVELOPER', 'QA', 'VIEWER'].includes(req.body.role)) throw fail('Invalid invitation role');
@@ -112,6 +114,12 @@ async function invite(req, res) {
   );
 }
 
+async function updateMemberRole(req, res) {
+  await requireWorkspaceRole(req.user.id, req.params.workspaceId, ADMIN_ROLES);
+  if (!['ADMIN', 'DEVELOPER', 'QA', 'VIEWER'].includes(req.body.role)) throw fail('Invalid member role');
+  respond(res, await prisma.workspaceMember.update({ where: { workspaceId_userId: { workspaceId: req.params.workspaceId, userId: req.params.userId } }, data: { role: req.body.role } }));
+}
+
 async function cancelInvitation(req, res) {
   const item = await prisma.workspaceInvitation.findUnique({ where: { id: req.params.invitationId } });
   if (!item) throw fail('Invitation not found', 404);
@@ -166,6 +174,7 @@ async function joinWorkspaceByCode(req, res) {
 
   const workspace = await prisma.workspace.findUnique({ where: { inviteCode: code } });
   if (!workspace) throw fail('Workspace code is invalid', 404);
+  if (workspace.visibility === 'PERSONAL') throw fail('Este workspace es personal y no acepta invitaciones', 403);
 
   await prisma.workspaceMember.upsert({
     where: {
@@ -436,6 +445,7 @@ async function deleteMockRoute(req, res) {
 module.exports = {
   listInvitations,
   listMyInvitations,
+  updateMemberRole,
   invite,
   cancelInvitation,
   acceptInvitation,

@@ -152,6 +152,26 @@
   flex: 0 0 22px;
 }
 
+.wb-import-folder-btn {
+  display: inline-flex;
+  cursor: pointer;
+}
+
+.wb-github-import-form {
+  display: flex;
+  gap: var(--spacing-2);
+  margin-top: var(--spacing-3);
+}
+
+.wb-github-import-form input {
+  min-width: 0;
+  flex: 1;
+}
+
+.wb-github-import-form button {
+  white-space: nowrap;
+}
+
 .wb-card-heading p {
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);

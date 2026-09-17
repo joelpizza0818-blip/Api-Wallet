@@ -30,6 +30,12 @@ enum WorkspaceMemberStatus {
   INVITED
   REMOVED
 }
+
+enum WorkspaceVisibility {
+  PERSONAL
+  TEAM
+  PUBLIC
+}
 enum ProjectStatus {
   ACTIVE
   ARCHIVED
@@ -144,6 +150,7 @@ model Workspace {
   slug String @unique
   description String?
   inviteCode String? @unique
+  visibility WorkspaceVisibility @default(TEAM)
   plan String @default("DEVELOPER")
   ownerId String
   createdAt DateTime @default(now())

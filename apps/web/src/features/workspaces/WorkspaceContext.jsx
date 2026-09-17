@@ -275,8 +275,8 @@ export function WorkspaceProvider({ children }) {
     setWorkspaceDetails(result.data);
     return result.data.inviteCode;
   };
-  const createWorkspace = async ({ name, description }) => {
-    const response = await fetch(`${API_URL}/api/workspaces`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, description }) });
+  const createWorkspace = async ({ name, description, visibility }) => {
+    const response = await fetch(`${API_URL}/api/workspaces`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, description, visibility }) });
     const result = await response.json();
     if (!response.ok) throw new Error(result.message || 'No se pudo crear el workspace');
     const workspace = result.data;

@@ -33,6 +33,18 @@ describe('HTTP API integration', () => {
     assert.strictEqual(body.message, 'Unauthorized');
   });
 
+  it('protects project imports without authentication', async () => {
+    const response = await fetch(`${baseUrl}/api/workspaces/workspace-id/import-project`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ files: [{ name: 'client.js', content: 'fetch("https://api.example.com")' }] }),
+    });
+    const body = await response.json();
+
+    assert.strictEqual(response.status, 401);
+    assert.strictEqual(body.message, 'Unauthorized');
+  });
+
   it('rejects cross-site state-changing requests before authentication', async () => {
     const response = await fetch(`${baseUrl}/api/auth/logout`, {
       method: 'POST',

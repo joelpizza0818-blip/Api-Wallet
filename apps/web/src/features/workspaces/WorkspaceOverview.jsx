@@ -19,6 +19,7 @@ function WorkspaceOverview({ onNavigateApis, onNavigateDocs, onNavigateFlows, on
 
   const handleShare = async () => {
     try {
+      if (workspaceDetails?.visibility === 'PERSONAL') { notify('Este workspace es personal y no se puede compartir.', 'error'); return; }
       const inviteCode = workspaceDetails?.inviteCode || await regenerateInviteCode();
       await navigator.clipboard.writeText(inviteCode);
       notify('Código de invitación copiado al portapapeles.');
@@ -65,7 +66,7 @@ function WorkspaceOverview({ onNavigateApis, onNavigateDocs, onNavigateFlows, on
             Run
           </button>
 
-          <button type="button" className="wb-ov-btn wb-ov-btn--primary" onClick={handleShare}>
+          <button type="button" className="wb-ov-btn wb-ov-btn--primary" onClick={handleShare} disabled={workspaceDetails?.visibility === 'PERSONAL'} title={workspaceDetails?.visibility === 'PERSONAL' ? 'Workspace personal' : 'Compartir workspace'}>
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="18" cy="5" r="3" />
               <circle cx="6" cy="12" r="3" />
