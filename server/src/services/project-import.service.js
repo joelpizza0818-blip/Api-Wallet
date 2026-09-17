@@ -118,6 +118,313 @@ function getFolderName(fileName, endpointPath) {
   return 'General';
 }
 
+const ROUTING_FILE_EXTENSIONS = ['.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs', '.vue', '.svelte'];
+
+function normalizeModuleFileName(fileName) {
+  return path.posix.normalize(String(fileName || '').replaceAll('\\', '/')).replace(/^\.\/+/, '').replace(/^\/+/, '');
+}
+
+function resolveRelativeModule(importerName, request, fileLookup) {
+  if (typeof request !== 'string' || !request.startsWith('.')) return null;
+
+  const importerPath = path.posix.dirname(normalizeModuleFileName(importerName));
+  const basePath = path.posix.normalize(path.posix.join(importerPath, request)).replace(/^\.\/+/, '');
+  const candidates = [basePath];
+  for (const extension of ROUTING_FILE_EXTENSIONS) candidates.push(`${basePath}${extension}`);
+  for (const extension of ROUTING_FILE_EXTENSIONS) candidates.push(`${basePath}/index${extension}`);
+
+  for (const candidate of candidates) {
+    if (fileLookup.exactFiles.has(candidate)) return candidate;
+    const caseInsensitiveMatch = fileLookup.lowerCaseFiles.get(candidate.toLowerCase());
+    if (caseInsensitiveMatch) return caseInsensitiveMatch;
+  }
+  return null;
+}
+
+function parseModuleBindings(content) {
+  const bindings = new Map();
+  const localRouterBindings = new Set();
+
+  const addBinding = (name, request) => {
+    if (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name) && typeof request === 'string') bindings.set(name, request);
+  };
+
+  // ES modules: import router from './router', import * as routes from './routes', and named imports.
+  const importRegex = /\bimport\s+([\s\S]{0,500}?)\s+from\s*['"]([^'"]+)['"]/g;
+  for (const match of content.matchAll(importRegex)) {
+    const clause = match[1].trim();
+    const request = match[2];
+    if (clause.startsWith('*')) {
+      const namespace = clause.match(/\bas\s+([A-Za-z_$][A-Za-z0-9_$]*)/);
+      if (namespace) addBinding(namespace[1], request);
+    } else if (clause.startsWith('{')) {
+      for (const specifier of clause.slice(1, clause.lastIndexOf('}')).split(',')) {
+        const parts = specifier.trim().split(/\s+as\s+/i);
+        addBinding((parts[1] || parts[0] || '').trim(), request);
+      }
+    } else {
+      const defaultImport = clause.split(',')[0].trim();
+      addBinding(defaultImport, request);
+    }
+  }
+
+  // CommonJS: const routes = require('./routes') and destructured require imports.
+  const requireRegex = /\b(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*require\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
+  for (const match of content.matchAll(requireRegex)) addBinding(match[1], match[2]);
+
+  const destructuredRequireRegex = /\b(?:const|let|var)\s*\{([^}]+)\}\s*=\s*require\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
+  for (const match of content.matchAll(destructuredRequireRegex)) {
+    for (const specifier of match[1].split(',')) {
+      const parts = specifier.trim().split(/\s*:\s*/);
+      addBinding((parts[1] || parts[0] || '').trim(), match[2]);
+    }
+  }
+
+  // Re-exports can be the module mounted by app.use as well.
+  const reExportRegex = /\bexport\s*\{([^}]+)\}\s*from\s*['"]([^'"]+)['"]/g;
+  for (const match of content.matchAll(reExportRegex)) {
+    for (const specifier of match[1].split(',')) {
+      const parts = specifier.trim().split(/\s+as\s+/i);
+      addBinding((parts[1] || parts[0] || '').trim(), match[2]);
+    }
+  }
+
+  // A router declared in the same file is a valid target for app.use('/prefix', router).
+  const localRouterRegex = /\b(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*(?:(?:[A-Za-z_$][A-Za-z0-9_$]*)\s*\.\s*)?Router\s*\(/g;
+  for (const match of content.matchAll(localRouterRegex)) localRouterBindings.add(match[1]);
+  if (/\brouter\s*\.\s*(?:get|post|put|patch|delete|options|head|all|route|use)\s*\(/i.test(content)) localRouterBindings.add('router');
+
+  return { bindings, localRouterBindings };
+}
+
+function findMatchingDelimiter(source, openIndex, open = '(', close = ')') {
+  let depth = 0;
+  let quote = null;
+  let escaped = false;
+  let lineComment = false;
+  let blockComment = false;
+
+  for (let index = openIndex; index < source.length; index += 1) {
+    const char = source[index];
+    const next = source[index + 1];
+    if (lineComment) {
+      if (char === '\n') lineComment = false;
+      continue;
+    }
+    if (blockComment) {
+      if (char === '*' && next === '/') {
+        blockComment = false;
+        index += 1;
+      }
+      continue;
+    }
+    if (quote) {
+      if (escaped) escaped = false;
+      else if (char === '\\') escaped = true;
+      else if (char === quote) quote = null;
+      continue;
+    }
+    if (char === '/' && next === '/') {
+      lineComment = true;
+      index += 1;
+      continue;
+    }
+    if (char === '/' && next === '*') {
+      blockComment = true;
+      index += 1;
+      continue;
+    }
+    if (char === '"' || char === "'" || char === '`') {
+      quote = char;
+      continue;
+    }
+    if (char === open) depth += 1;
+    else if (char === close) {
+      depth -= 1;
+      if (depth === 0) return index;
+    }
+  }
+  return -1;
+}
+
+function splitTopLevelArguments(source) {
+  const argumentsList = [];
+  let start = 0;
+  let parenDepth = 0;
+  let bracketDepth = 0;
+  let braceDepth = 0;
+  let quote = null;
+  let escaped = false;
+
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+    if (quote) {
+      if (escaped) escaped = false;
+      else if (char === '\\') escaped = true;
+      else if (char === quote) quote = null;
+      continue;
+    }
+    if (char === '"' || char === "'" || char === '`') {
+      quote = char;
+      continue;
+    }
+    if (char === '(') parenDepth += 1;
+    else if (char === ')') parenDepth -= 1;
+    else if (char === '[') bracketDepth += 1;
+    else if (char === ']') bracketDepth -= 1;
+    else if (char === '{') braceDepth += 1;
+    else if (char === '}') braceDepth -= 1;
+    else if (char === ',' && parenDepth === 0 && bracketDepth === 0 && braceDepth === 0) {
+      argumentsList.push(source.slice(start, index).trim());
+      start = index + 1;
+    }
+  }
+  argumentsList.push(source.slice(start).trim());
+  return argumentsList.filter(Boolean);
+}
+
+function findUseCalls(content) {
+  const calls = [];
+  const useRegex = /\b([A-Za-z_$][A-Za-z0-9_$]*)\s*\.\s*use\s*\(/g;
+  for (const match of content.matchAll(useRegex)) {
+    const openIndex = match.index + match[0].lastIndexOf('(');
+    const closeIndex = findMatchingDelimiter(content, openIndex);
+    if (closeIndex < 0) continue;
+    calls.push({ receiver: match[1], args: splitTopLevelArguments(content.slice(openIndex + 1, closeIndex)) });
+  }
+  return calls;
+}
+
+function normalizeRoutePrefix(prefix) {
+  if (typeof prefix !== 'string') return '/';
+  const trimmed = prefix.trim();
+  if (!trimmed || trimmed === '/') return '/';
+  if (/^https?:\/\//i.test(trimmed)) return trimmed.replace(/\/+$/, '');
+  const withoutQuery = trimmed.split(/[?#]/)[0];
+  return `/${withoutQuery.replace(/^\/+|\/+$/g, '')}`;
+}
+
+function joinRoutePaths(prefix, routePath) {
+  if (typeof routePath !== 'string' || !routePath) return prefix || '/';
+  if (/^https?:\/\//i.test(routePath)) return routePath;
+  const normalizedPrefix = normalizeRoutePrefix(prefix);
+  const normalizedRoute = routePath.trim();
+  if (normalizedPrefix === '/') return normalizedRoute.startsWith('/') ? normalizedRoute : `/${normalizedRoute}`;
+  if (normalizedRoute === '/') return normalizedPrefix;
+  return `${normalizedPrefix}/${normalizedRoute.replace(/^\/+/, '')}`.replace(/([^:])\/{2,}/g, '$1/');
+}
+
+function resolveMountedFile(record, expression, fileLookup) {
+  const target = expression.replace(/;\s*$/, '').trim();
+  const directRequire = target.match(/^require\s*\(\s*['"]([^'"]+)['"]\s*\)/);
+  if (directRequire) return resolveRelativeModule(record.name, directRequire[1], fileLookup);
+
+  const identifier = target.match(/^([A-Za-z_$][A-Za-z0-9_$]*)/);
+  if (!identifier) return null;
+  const request = record.bindings.get(identifier[1]);
+  if (request) return resolveRelativeModule(record.name, request, fileLookup);
+  if (record.localRouterBindings.has(identifier[1])) return record.name;
+  return null;
+}
+
+/**
+ * Builds the effective Express-style mount prefixes before route extraction.
+ * Each edge is source file -> mounted module, so nested mounts can be resolved
+ * without rescanning file contents during the route pass.
+ */
+function buildRoutePrefixMap(files) {
+  const records = files.map((file) => {
+    const name = normalizeModuleFileName(file.name);
+    return { name, content: file.content, ...parseModuleBindings(file.content) };
+  });
+  const fileNames = records.map((record) => record.name);
+  const fileLookup = {
+    exactFiles: new Set(fileNames),
+    lowerCaseFiles: new Map(fileNames.map((name) => [name.toLowerCase(), name])),
+  };
+  const edges = [];
+
+  for (const record of records) {
+    for (const call of findUseCalls(record.content)) {
+      if (!call.args.length) continue;
+      const prefixMatch = call.args[0].match(/^(['"`])([^'"`]*)\1$/);
+      if (!prefixMatch) continue;
+      const targetExpression = call.args[call.args.length - 1];
+      const targetFile = resolveMountedFile(record, targetExpression, fileLookup);
+      if (!targetFile) continue;
+      edges.push({ source: record.name, target: targetFile, prefix: normalizeRoutePrefix(prefixMatch[2]) });
+    }
+  }
+
+  const prefixesByFile = new Map(records.map((record) => [record.name, new Set(['/'])]));
+  const outgoing = new Map();
+  for (const edge of edges) {
+    if (!outgoing.has(edge.source)) outgoing.set(edge.source, []);
+    outgoing.get(edge.source).push(edge);
+  }
+
+  const queue = [];
+  const seenPrefixes = new Set();
+  for (const record of records) {
+    const rootKey = `${record.name}|/`;
+    seenPrefixes.add(rootKey);
+    queue.push([record.name, '/']);
+  }
+
+  while (queue.length) {
+    const [source, sourcePrefix] = queue.shift();
+    const sourcePrefixes = prefixesByFile.get(source) || new Set(['/']);
+    for (const edge of outgoing.get(source) || []) {
+      if (edge.source === edge.target) {
+        const localPrefixes = prefixesByFile.get(edge.source) || new Set(['/']);
+        for (const prefix of [...localPrefixes]) {
+          const combined = joinRoutePaths(prefix, edge.prefix);
+          if (!localPrefixes.has(combined)) {
+            localPrefixes.add(combined);
+          }
+        }
+        continue;
+      }
+
+      const targetPrefixes = prefixesByFile.get(edge.target);
+      if (!targetPrefixes) continue;
+      const nextPrefix = joinRoutePaths(sourcePrefix, edge.prefix);
+      if (!targetPrefixes.has(nextPrefix)) {
+        targetPrefixes.add(nextPrefix);
+      }
+
+      const stateKey = `${edge.target}|${nextPrefix}`;
+      if (!seenPrefixes.has(stateKey)) {
+        seenPrefixes.add(stateKey);
+        queue.push([edge.target, nextPrefix]);
+      }
+    }
+  }
+
+  for (const edge of edges.filter((candidate) => candidate.source === candidate.target)) {
+    const localPrefixes = prefixesByFile.get(edge.source);
+    if (!localPrefixes) continue;
+    for (const prefix of [...localPrefixes]) {
+      const combined = joinRoutePaths(prefix, edge.prefix);
+      if (!localPrefixes.has(combined)) {
+        localPrefixes.add(combined);
+      }
+    }
+    if (localPrefixes.size > 1) {
+      localPrefixes.delete('/');
+    }
+  }
+
+  for (const [name, prefixes] of prefixesByFile.entries()) {
+    const hasMountedPrefix = [...prefixes].some((prefix) => prefix !== '/');
+    if (hasMountedPrefix) {
+      prefixes.delete('/');
+    }
+  }
+
+  return new Map([...prefixesByFile.entries()].map(([name, prefixes]) => [name, [...prefixes]]));
+}
+
 /**
  * Returns a realistic, human-friendly sample value for a field name and optional type.
  */
@@ -568,9 +875,10 @@ function inferRequestBody(method, endpointPath, contentContext = '', rawBodySamp
   }, null, 2);
 }
 
-function detectFromContent(content, fileName, env) {
+function detectFromContent(content, fileName, env, routingContext = {}) {
   const matches = [];
   const normalizedFileName = fileName.replaceAll('\\', '/');
+  const routePrefixes = [...new Set((routingContext.routePrefixes || []).map(normalizeRoutePrefix))];
 
   const add = (method, rawUrl, library, customDescription, customFolder, customBody, customHeaders, customParams) => {
     if (!rawUrl || typeof rawUrl !== 'string' || rawUrl.length > 500 || rawUrl === '*' || rawUrl === '/*') return;
@@ -611,11 +919,30 @@ function detectFromContent(content, fileName, env) {
     }
   };
 
+  const addServerRoute = (method, rawPath, library, customDescription, customFolder, customBody, customHeaders, customParams) => {
+    const prefixes = routePrefixes.length ? routePrefixes : ['/'];
+    for (const prefix of prefixes) {
+      add(method, joinRoutePaths(prefix, rawPath), library, customDescription, customFolder, customBody, customHeaders, customParams);
+    }
+  };
+
+  const addExpressRoute = (receiver, method, rawPath, library, customDescription, customFolder, customBody, customHeaders, customParams) => {
+    // Direct app/server routes are not children of a router mounted in the
+    // same file; only router-style receivers inherit that file's prefixes.
+    const prefixes = routePrefixes.length && !['app', 'server'].includes(String(receiver).toLowerCase())
+      ? routePrefixes
+      : ['/'];
+    for (const prefix of prefixes) {
+      add(method, joinRoutePaths(prefix, rawPath), library, customDescription, customFolder, customBody, customHeaders, customParams);
+    }
+  };
+
   // ── 1. Express / Router / Server Route Definitions ─────────────────────
   const httpMethods = 'get|post|put|patch|delete|options|head|all';
   const serverRouteRegex = new RegExp(`\\b(?:router|app|server|api)\\s*\\.\\s*(${httpMethods})\\s*\\(\\s*['"\`]([^'"\`]+)['"\`]`, 'gi');
   for (const match of content.matchAll(serverRouteRegex)) {
-    add(match[1] === 'all' ? 'GET' : match[1], match[2], 'Express/Server Route');
+    const receiver = match[0].match(/^([A-Za-z_$][A-Za-z0-9_$]*)/)?.[1] || 'router';
+    addExpressRoute(receiver, match[1] === 'all' ? 'GET' : match[1], match[2], 'Express/Server Route');
   }
 
   const routeChainedRegex = /\b(?:router|app)\s*\.\s*route\s*\(\s*['"`]([^'"`]+)['"`]\)([\s\S]*?)(?=(?:router|app|module\.exports|const\s|let\s|var\s|export\s|\n\s*\n|$))/gi;
@@ -624,7 +951,8 @@ function detectFromContent(content, fileName, env) {
     const chainBlock = match[2];
     const chainedMethodsRegex = new RegExp(`\\.\\s*(${httpMethods})\\s*\\(`, 'gi');
     for (const m of chainBlock.matchAll(chainedMethodsRegex)) {
-      add(m[1] === 'all' ? 'GET' : m[1], routePath, 'Express Chained Route');
+      const receiver = match[0].match(/^([A-Za-z_$][A-Za-z0-9_$]*)/)?.[1] || 'router';
+      addExpressRoute(receiver, m[1] === 'all' ? 'GET' : m[1], routePath, 'Express Chained Route');
     }
   }
 
@@ -633,19 +961,19 @@ function detectFromContent(content, fileName, env) {
   for (const match of content.matchAll(nestMethodRegex)) {
     const m = match[1];
     const p = match[2] || '/';
-    add(m === 'All' ? 'GET' : m, p.startsWith('/') ? p : `/${p}`, 'NestJS Decorator');
+    addServerRoute(m === 'All' ? 'GET' : m, p.startsWith('/') ? p : `/${p}`, 'NestJS Decorator');
   }
 
   // ── 3. Fastify & Koa & Hono & Elysia ──────────────────────────────────
   const fastifyRegex = /\b(?:fastify|hono|elysia)\s*\.\s*(get|post|put|patch|delete|options|head)\s*\(\s*['"`]([^'"`]+)['"`]/gi;
   for (const match of content.matchAll(fastifyRegex)) {
-    add(match[1], match[2], 'Fastify/Hono Route');
+    addServerRoute(match[1], match[2], 'Fastify/Hono Route');
   }
 
   // ── 4. Python (FastAPI, Flask, Django) ─────────────────────────────────
   const pyDecoratorRegex = /@(?:app|router|api|bp)\s*\.\s*(get|post|put|patch|delete)\s*\(\s*['"`]([^'"`]+)['"`]/gi;
   for (const match of content.matchAll(pyDecoratorRegex)) {
-    add(match[1], match[2], 'Python FastAPI/Flask Route');
+    addServerRoute(match[1], match[2], 'Python FastAPI/Flask Route');
   }
   const flaskRouteRegex = /@app\s*\.\s*route\s*\(\s*['"`]([^'"`]+)['"`](?:[\s\S]*?methods\s*=\s*\[([^\]]+)\])?/gi;
   for (const match of content.matchAll(flaskRouteRegex)) {
@@ -653,39 +981,39 @@ function detectFromContent(content, fileName, env) {
     const methodsStr = match[2];
     if (methodsStr) {
       for (const m of methodsStr.matchAll(/['"`](GET|POST|PUT|PATCH|DELETE)['"`]/gi)) {
-        add(m[1], routePath, 'Flask Route');
+        addServerRoute(m[1], routePath, 'Flask Route');
       }
     } else {
-      add('GET', routePath, 'Flask Route');
+      addServerRoute('GET', routePath, 'Flask Route');
     }
   }
   const djangoPathRegex = /\bpath\s*\(\s*['"`]([^'"`]+)['"`]/gi;
   for (const match of content.matchAll(djangoPathRegex)) {
     if (!match[1].startsWith('admin/')) {
-      add('GET', `/${match[1].replace(/\/+$/, '')}`, 'Django Path');
+      addServerRoute('GET', `/${match[1].replace(/\/+$/, '')}`, 'Django Path');
     }
   }
 
   // ── 5. Go (Gin, Fiber, Echo, Chi, net/http) ───────────────────────────
   const goRouterRegex = /\b(?:r|router|api|app|e|g|v1)\s*\.\s*(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)\s*\(\s*["`philosophy]([^"`]+)["`]/g;
   for (const match of content.matchAll(goRouterRegex)) {
-    add(match[1], match[2], 'Go Router');
+    addServerRoute(match[1], match[2], 'Go Router');
   }
   const goHttpRegex = /http\s*\.\s*HandleFunc\s*\(\s*["`philosophy]([^"`]+)["`]/g;
   for (const match of content.matchAll(goHttpRegex)) {
-    add('GET', match[1], 'Go net/http');
+    addServerRoute('GET', match[1], 'Go net/http');
   }
 
   // ── 6. Java / Kotlin / Spring Boot ────────────────────────────────────
   const springMappingRegex = /@(Get|Post|Put|Patch|Delete)Mapping\s*\(\s*(?:(?:value|path)\s*=\s*)?["']([^"']+)["']/gi;
   for (const match of content.matchAll(springMappingRegex)) {
-    add(match[1], match[2], 'Spring Boot Mapping');
+    addServerRoute(match[1], match[2], 'Spring Boot Mapping');
   }
 
   // ── 7. PHP / Laravel / Symfony ────────────────────────────────────────
   const laravelRouteRegex = /Route\s*::\s*(get|post|put|patch|delete|options)\s*\(\s*['"`]([^'"`]+)['"`]/gi;
   for (const match of content.matchAll(laravelRouteRegex)) {
-    add(match[1], match[2], 'Laravel Route');
+    addServerRoute(match[1], match[2], 'Laravel Route');
   }
 
   // ── 8. Next.js App Router route.js/ts ──────────────────────────────────
@@ -839,7 +1167,10 @@ function analyzeFiles(inputFiles) {
   }
 
   const env = parseEnv(safeFiles);
-  const endpoints = safeFiles.flatMap((file) => detectFromContent(file.content, file.name, env));
+  const routePrefixMap = buildRoutePrefixMap(safeFiles);
+  const endpoints = safeFiles.flatMap((file) => detectFromContent(file.content, file.name, env, {
+    routePrefixes: routePrefixMap.get(normalizeModuleFileName(file.name)) || [],
+  }));
 
   // Deduplicate endpoints by method + path
   const seen = new Set();
@@ -887,6 +1218,7 @@ module.exports = {
   analyzeFiles,
   readGithubRepository,
   detectFromContent,
+  buildRoutePrefixMap,
   isRelevantFile,
   normalizeUrl,
   getPath,

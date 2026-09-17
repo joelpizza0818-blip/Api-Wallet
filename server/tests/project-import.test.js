@@ -73,6 +73,56 @@ describe('Project importer', () => {
     assert.equal(wildcardEp, undefined);
   });
 
+  it('resolves nested Express mount prefixes across imported modules', () => {
+    const result = analyzeFiles([
+      {
+        name: 'app.js',
+        content: `
+          import routes from './routes';
+          app.use('/api', routes);
+        `,
+      },
+      {
+        name: 'routes/index.js',
+        content: `
+          const aiRoutes = require('./ai.routes');
+          router.use('/ai', aiRoutes);
+        `,
+      },
+      {
+        name: 'routes/ai.routes.js',
+        content: `
+          router.get('/chats', listChats);
+          router.post('/chats', createChat);
+        `,
+      },
+    ]);
+
+    const chatRoutes = result.endpoints.filter((endpoint) => endpoint.path === '/api/ai/chats');
+    assert.equal(chatRoutes.length, 2);
+    assert.deepEqual(chatRoutes.map((endpoint) => endpoint.method).sort(), ['GET', 'POST']);
+    assert.equal(result.endpoints.some((endpoint) => endpoint.path === '/chats'), false);
+  });
+
+  it('uses the mounted prefix for routers declared in the same file', () => {
+    const result = analyzeFiles([
+      {
+        name: 'app.js',
+        content: `
+          const router = express.Router();
+          app.use('/api', router);
+          router.get('/chats', listChats);
+          app.get('/health', healthcheck);
+        `,
+      },
+    ]);
+
+    assert.ok(result.endpoints.some((endpoint) => endpoint.path === '/api/chats'));
+    assert.equal(result.endpoints.some((endpoint) => endpoint.path === '/chats'), false);
+    assert.ok(result.endpoints.some((endpoint) => endpoint.path === '/health'));
+    assert.equal(result.endpoints.some((endpoint) => endpoint.path === '/api/health'), false);
+  });
+
   it('generates body from Zod schemas and req.body code patterns', () => {
     const result = analyzeFiles([
       {
