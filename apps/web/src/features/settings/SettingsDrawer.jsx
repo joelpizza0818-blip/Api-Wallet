@@ -1105,8 +1105,8 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
 
       {/* ── Project Analysis Modal ────────────────────────────────────────── */}
       {analysisModal.isOpen && (
-        <div className="wb-analysis-modal-overlay">
-          <div className="wb-analysis-modal-card">
+        <div className="wb-analysis-modal-overlay" onClick={(event) => event.stopPropagation()}>
+          <div className="wb-analysis-modal-card" onClick={(event) => event.stopPropagation()}>
             {/* Hub Animation */}
             <div className="wb-analysis-hub">
               {analysisModal.status === 'analyzing' && (
