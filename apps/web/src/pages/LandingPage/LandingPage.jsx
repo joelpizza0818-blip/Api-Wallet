@@ -103,6 +103,8 @@ const FEATURES = [
 ];
 
 const GUIDE_SHOTS = [
+  { title: 'Importar desde tu repo', description: 'Analiza un repositorio de GitHub y convierte sus rutas en endpoints organizados.', image: '/guide/05-repository-import.svg', steps: ['Abre Workspace Settings y pega la URL pública de tu repositorio.', 'Pulsa Analizar proyecto para detectar rutas, métodos y variables de configuración.', 'Revisa el resumen y confirma para crear las colecciones y endpoints en tu proyecto.'] },
+  { title: 'Importar archivos locales', description: 'Selecciona una carpeta de tu equipo para crear endpoints a partir del código del proyecto.', image: '/guide/06-local-import.svg', steps: ['Entra en Workspace Settings y selecciona Importar carpeta local.', 'Elige la carpeta del proyecto; API-Wallet analiza los archivos compatibles.', 'Confirma la importación y revisa los endpoints creados en Colecciones.'] },
   { title: 'Importar desde Postman', description: 'Lleva tus colecciones y requests a API-Wallet desde un JSON de Postman.', image: '/guide/04-postman-import.svg', steps: ['Exporta la colección desde Postman como JSON.', 'Abre Settings en el Workspace y selecciona Importar desde Postman.', 'Revisa el resumen y confirma la importación de tus requests.'] },
   { title: 'Dashboard', description: 'Estadísticas y actividad del workspace.', image: '/guide/02-dashboard.png', steps: ['Revisa Projects, API Keys, APIs registradas y miembros.', 'Consulta la actividad reciente del workspace.', 'Abre el Workspace para ejecutar y organizar requests.'] },
   { title: 'Invitaciones', description: 'Invita colaboradores y gestiona roles.', image: '/guide/03-invitations.png', steps: ['Escribe el correo del colaborador.', 'Selecciona Developer, Admin, QA o Viewer.', 'Pulsa Enviar Invitación y revisa el estado pendiente.'] },
@@ -220,8 +222,8 @@ function LandingPage() {
 
       <section className="landing__guide">
         <div className="container">
-          <h2 className="landing__section-title">Conoce el workspace</h2>
-          <p className="landing__section-subtitle">Una guía visual rápida de las áreas principales de API-Wallet.</p>
+          <h2 className="landing__section-title">Aprende a crear endpoints desde cualquier proyecto</h2>
+          <p className="landing__section-subtitle">Tutoriales visuales para importar desde tu repo, una carpeta local o una colección existente.</p>
           <div className="landing__guide-grid">
             {GUIDE_SHOTS.map((shot) => (
               <article className="landing__guide-card" key={shot.title} role="button" tabIndex={0} onClick={() => setSelectedGuide(shot)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') setSelectedGuide(shot); }}>
