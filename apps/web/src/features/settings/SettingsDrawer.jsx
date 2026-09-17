@@ -95,6 +95,14 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
   });
 
 
+  const handleCloseModal = () => {
+    const wasSuccess = analysisModal.status === 'success';
+    setAnalysisModal((prev) => ({ ...prev, isOpen: false }));
+    if (wasSuccess) {
+      window.location.reload();
+    }
+  };
+
   const applyBaseUrl = async () => {
     const { collectionIds, baseUrl } = analysisModal;
     if (!baseUrl.trim() || !collectionIds.length) return;
@@ -154,7 +162,7 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
       setAnalysisModal({
         isOpen: true,
         status: 'success',
-        collectionIds: (data.collections || []).map((c) => c.id),
+        collectionIds: (collections || []).map((c) => c.id),
         targetName: targetLabel,
         stepIndex: 3,
         message: '¡Análisis completado con éxito!',
@@ -166,9 +174,6 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
       });
 
       setGithubUrl('');
-      setTimeout(() => {
-        window.location.reload();
-      }, 1600);
     } catch (error) {
       clearTimeout(stepTimer1);
       clearTimeout(stepTimer2);
@@ -1132,7 +1137,7 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
               <button
                 type="button"
                 className="wb-analysis-btn-close"
-                onClick={() => setAnalysisModal((prev) => ({ ...prev, isOpen: false }))}
+                onClick={handleCloseModal}
               >
                 Listo
               </button>
