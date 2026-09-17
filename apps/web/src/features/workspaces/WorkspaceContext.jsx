@@ -9,26 +9,33 @@ const WorkspaceContext = createContext(null);
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 const hexToRgb = (hex) => {
+  if (typeof hex !== 'string') return { r: 15, g: 15, b: 15 };
   const value = hex.replace('#', '');
+  const r = Number.parseInt(value.slice(0, 2), 16);
+  const g = Number.parseInt(value.slice(2, 4), 16);
+  const b = Number.parseInt(value.slice(4, 6), 16);
   return {
-    r: Number.parseInt(value.slice(0, 2), 16),
-    g: Number.parseInt(value.slice(2, 4), 16),
-    b: Number.parseInt(value.slice(4, 6), 16),
+    r: Number.isNaN(r) ? 15 : r,
+    g: Number.isNaN(g) ? 15 : g,
+    b: Number.isNaN(b) ? 15 : b,
   };
 };
 
 const ensureDarkHex = (hex) => {
+  if (!hex || typeof hex !== 'string' || !hex.startsWith('#') || hex.length < 7 || hex.toLowerCase().includes('nan')) {
+    return '#0f0f0f';
+  }
   const rgb = hexToRgb(hex);
   const luminance = (rgb.r * 0.2126 + rgb.g * 0.7152 + rgb.b * 0.0722) / 255;
   if (luminance <= 0.22) return hex;
   const scale = 0.22 / luminance;
-  const channel = (value) => Math.round(value * scale).toString(16).padStart(2, '0');
+  const channel = (value) => Math.min(255, Math.max(0, Math.round(value * scale))).toString(16).padStart(2, '0');
   return `#${channel(rgb.r)}${channel(rgb.g)}${channel(rgb.b)}`;
 };
 
 const lightenHex = (hex, amount) => {
   const { r, g, b } = hexToRgb(hex);
-  const channel = (value) => Math.round(value + (255 - value) * amount).toString(16).padStart(2, '0');
+  const channel = (value) => Math.min(255, Math.max(0, Math.round(value + (255 - value) * amount))).toString(16).padStart(2, '0');
   return `#${channel(r)}${channel(g)}${channel(b)}`;
 };
 

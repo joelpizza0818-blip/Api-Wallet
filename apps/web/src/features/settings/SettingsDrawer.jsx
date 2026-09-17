@@ -377,13 +377,14 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
   };
 
   const handleCustomBackgroundChange = (event) => {
-    const { r, g, b } = [1, 3, 5].reduce((channels, index, channelIndex) => {
-      channels[channelIndex] = Number.parseInt(event.target.value.slice(index, index + 2), 16);
-      return channels;
-    }, []);
+    const hex = event.target.value;
+    if (!hex || !hex.startsWith('#') || hex.length < 7) return;
+    const r = Number.parseInt(hex.slice(1, 3), 16) || 0;
+    const g = Number.parseInt(hex.slice(3, 5), 16) || 0;
+    const b = Number.parseInt(hex.slice(5, 7), 16) || 0;
     const luminance = (r * 0.2126 + g * 0.7152 + b * 0.0722) / 255;
     const scale = luminance > 0.22 ? 0.22 / luminance : 1;
-    const channel = (value) => Math.round(value * scale).toString(16).padStart(2, '0');
+    const channel = (value) => Math.min(255, Math.max(0, Math.round(value * scale))).toString(16).padStart(2, '0');
     setCustomBackground(`#${channel(r)}${channel(g)}${channel(b)}`);
     setPrimaryTheme('custom');
   };
