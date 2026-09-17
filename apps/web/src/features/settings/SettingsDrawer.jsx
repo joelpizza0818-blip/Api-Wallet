@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useWorkspace } from '../workspaces/WorkspaceContext';
 import { PRIMARY_THEMES, ACCENT_COLORS } from '../workspaces/themeConstants';
 import { useAuth } from '../auth/AuthContext';
+import { useFeedback } from '../../components/common/Feedback/FeedbackContext';
 import './SettingsDrawer.css';
 
 const AVATAR_PRESETS = [
@@ -16,6 +17,7 @@ const AVATAR_PRESETS = [
 
 function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteProject }) {
   const navigate = useNavigate();
+  const { confirm, alert: showAlert } = useFeedback();
   const {
     primaryTheme,
     setPrimaryTheme,
@@ -64,13 +66,21 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
 
   const handleDeleteWorkspace = async () => {
     const wsName = workspaceDetails?.name || 'este workspace';
-    if (!window.confirm(`¿Estás seguro de que deseas eliminar permanentemente el workspace "${wsName}" y todos sus proyectos, colecciones y recursos? Esta acción NO se puede deshacer.`)) return;
+    const accepted = await confirm({
+      title: 'Eliminar workspace',
+      message: `¿Estás seguro de que deseas eliminar permanentemente el workspace "${wsName}" y todos sus proyectos, colecciones y recursos? Esta acción no se puede deshacer.`,
+      confirmLabel: 'Eliminar workspace',
+    });
+    if (!accepted) return;
     try {
       setIsDeletingWorkspace(true);
       await deleteWorkspace(activeWorkspaceId);
       onClose();
     } catch (err) {
-      alert(err.message || 'Error al eliminar el workspace');
+      await showAlert({
+        title: 'No se pudo eliminar el workspace',
+        message: err.message || 'Ocurrió un error al eliminar el workspace.',
+      });
     } finally {
       setIsDeletingWorkspace(false);
     }
@@ -78,13 +88,21 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
 
   const handleLeaveWorkspace = async () => {
     const wsName = workspaceDetails?.name || 'este workspace';
-    if (!window.confirm(`¿Estás seguro de que deseas salir de "${wsName}"? Ya no tendrás acceso a sus proyectos ni colecciones.`)) return;
+    const accepted = await confirm({
+      title: 'Salir del workspace',
+      message: `¿Estás seguro de que deseas salir de "${wsName}"? Ya no tendrás acceso a sus proyectos ni colecciones.`,
+      confirmLabel: 'Salir del workspace',
+    });
+    if (!accepted) return;
     try {
       setIsLeavingWorkspace(true);
       await leaveWorkspace(activeWorkspaceId);
       onClose();
     } catch (err) {
-      alert(err.message || 'Error al salir del workspace');
+      await showAlert({
+        title: 'No se pudo salir del workspace',
+        message: err.message || 'Ocurrió un error al intentar salir del workspace.',
+      });
     } finally {
       setIsLeavingWorkspace(false);
     }
