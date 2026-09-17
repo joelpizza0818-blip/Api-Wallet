@@ -113,4 +113,43 @@ async function importProject(req, res) {
   });
 }
 
-module.exports = { importProject };
+
+async function applyBaseUrl(req, res) {
+  const { workspaceId } = req.params;
+  await requireWorkspaceRole(req.user.id, workspaceId, WRITE_ROLES);
+
+  const { collectionIds, baseUrl } = req.body;
+  if (!Array.isArray(collectionIds) || !collectionIds.length) {
+    throw Object.assign(new Error('collectionIds is required'), { statusCode: 400 });
+  }
+  if (!baseUrl || typeof baseUrl !== 'string') {
+    throw Object.assign(new Error('baseUrl is required'), { statusCode: 400 });
+  }
+
+  // Normalise: strip trailing slash
+  const base = baseUrl.replace(/\/+$/, '');
+
+  // Update every request in those collections that doesn't already have a full URL
+  const requests = await prisma.apiRequest.findMany({
+    where: { collectionId: { in: collectionIds } },
+    select: { id: true, url: true, path: true },
+  });
+
+  let updated = 0;
+  for (const r of requests) {
+    // Only prepend if url is empty / relative (no http:// or https://)
+    const currentUrl = r.url || r.path || '';
+    if (/^https?:\/\//i.test(currentUrl)) continue; // already absolute – skip
+    const newUrl = base + (currentUrl.startsWith('/') ? currentUrl : '/' + currentUrl);
+    await prisma.apiRequest.update({
+      where: { id: r.id },
+      data: { url: newUrl },
+    });
+    updated++;
+  }
+
+  res.status(200).json({ success: true, data: { updated } });
+}
+
+module.exports = { importProject, applyBaseUrl };
+

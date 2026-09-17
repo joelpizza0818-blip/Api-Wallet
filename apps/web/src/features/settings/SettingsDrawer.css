@@ -1108,3 +1108,85 @@
   background: var(--color-primary, #7c3aed);
   border-color: var(--color-primary, #7c3aed);
 }
+
+/* ── Base URL section (after analysis success) ───────────────────────── */
+.wb-base-url-section {
+  margin-top: 14px;
+  padding: 14px 16px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wb-base-url-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--accent-color, #a78bfa);
+  text-transform: uppercase;
+}
+
+.wb-base-url-optional {
+  font-weight: 400;
+  text-transform: none;
+  color: rgba(255,255,255,0.4);
+  letter-spacing: 0;
+}
+
+.wb-base-url-hint {
+  font-size: 0.72rem;
+  color: rgba(255,255,255,0.45);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.wb-base-url-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.wb-base-url-input {
+  flex: 1;
+  background: rgba(0,0,0,0.25);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 7px;
+  color: #e2e8f0;
+  font-size: 0.82rem;
+  padding: 7px 11px;
+  outline: none;
+  transition: border-color 0.2s;
+  font-family: 'JetBrains Mono', monospace, sans-serif;
+}
+.wb-base-url-input::placeholder { color: rgba(255,255,255,0.28); }
+.wb-base-url-input:focus { border-color: var(--accent-color, #a78bfa); }
+.wb-base-url-input:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.wb-base-url-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 14px;
+  border-radius: 7px;
+  border: none;
+  background: var(--accent-color, #a78bfa);
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.15s;
+  white-space: nowrap;
+}
+.wb-base-url-btn:hover:not(:disabled) { opacity: 0.85; transform: translateY(-1px); }
+.wb-base-url-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.wb-base-url-btn--done {
+  background: #10b981;
+  cursor: default;
+}

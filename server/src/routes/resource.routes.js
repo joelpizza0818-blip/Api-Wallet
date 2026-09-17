@@ -9,6 +9,7 @@ router.post('/public/projects/:projectId/access', c.accessPublicProject);
 router.route('/workspaces').get(c.listWorkspaces).post(c.createWorkspace);
 router.route('/workspaces/:workspaceId').get(c.getWorkspace).patch(c.updateWorkspace).delete(c.removeWorkspace);
 router.post('/workspaces/:workspaceId/import-project', projectImport.importProject);
+router.post('/workspaces/:workspaceId/import-project/apply-base-url', projectImport.applyBaseUrl);
 router.route('/workspaces/:workspaceId/projects').get(c.listProjects).post(c.createProject);
 router.route('/projects/:projectId').get(c.getProject).patch(c.updateProject).delete(c.removeProject);
 router.route('/projects/:projectId/collections').get(c.listCollections).post(c.createCollection);

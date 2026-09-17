@@ -88,8 +88,30 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
     error: '',
     collectionsCount: 0,
     importedCount: 0,
+    collectionIds: [],
+    baseUrl: '',
+    baseUrlApplied: false,
+    baseUrlApplying: false,
   });
 
+
+  const applyBaseUrl = async () => {
+    const { collectionIds, baseUrl } = analysisModal;
+    if (!baseUrl.trim() || !collectionIds.length) return;
+    setAnalysisModal((prev) => ({ ...prev, baseUrlApplying: true }));
+    try {
+      const response = await fetch(`${API_URL}/api/workspaces/${activeWorkspaceId}/import-project/apply-base-url`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ collectionIds, baseUrl: baseUrl.trim() }),
+      });
+      if (!response.ok) throw new Error('No se pudo aplicar la base URL');
+      setAnalysisModal((prev) => ({ ...prev, baseUrlApplied: true, baseUrlApplying: false }));
+    } catch (err) {
+      setAnalysisModal((prev) => ({ ...prev, baseUrlApplying: false }));
+    }
+  };
   const importProject = async ({ files, repositoryUrl = '' }) => {
     const targetLabel = repositoryUrl || (files?.length ? `Carpeta local (${files.length} archivos)` : 'Proyecto');
     setAnalysisModal({
@@ -132,6 +154,7 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
       setAnalysisModal({
         isOpen: true,
         status: 'success',
+        collectionIds: (data.collections || []).map((c) => c.id),
         targetName: targetLabel,
         stepIndex: 3,
         message: '¡Análisis completado con éxito!',
@@ -1058,8 +1081,60 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
             {analysisModal.status === 'success' && (
               <div className="wb-analysis-result-box wb-analysis-result-box--success">
                 <strong>✓ {analysisModal.importedCount} endpoints importados</strong>
-                <div>Organizados en {analysisModal.collectionsCount} colecciones por carpeta/módulo. Actualizando…</div>
+                <div>Organizados en {analysisModal.collectionsCount} colecciones por carpeta/módulo.</div>
               </div>
+            )}
+
+            {/* Base URL section after success */}
+            {analysisModal.status === 'success' && (
+              <div className="wb-base-url-section">
+                <label className="wb-base-url-label">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10" /><line x1="2" y1="12" x2="22" y2="12" />
+                    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                  </svg>
+                  Base URL <span className="wb-base-url-optional">(opcional)</span>
+                </label>
+                <p className="wb-base-url-hint">Se aplicará a los endpoints importados que no tengan URL absoluta.</p>
+                <div className="wb-base-url-row">
+                  <input
+                    type="text"
+                    className="wb-base-url-input"
+                    placeholder="https://api.miservicio.com"
+                    value={analysisModal.baseUrl}
+                    onChange={(e) => setAnalysisModal((prev) => ({ ...prev, baseUrl: e.target.value, baseUrlApplied: false }))}
+                    disabled={analysisModal.baseUrlApplied || analysisModal.baseUrlApplying}
+                  />
+                  <button
+                    type="button"
+                    className={`wb-base-url-btn${analysisModal.baseUrlApplied ? ' wb-base-url-btn--done' : ''}`}
+                    onClick={analysisModal.baseUrlApplied ? undefined : applyBaseUrl}
+                    disabled={!analysisModal.baseUrl.trim() || analysisModal.baseUrlApplying || analysisModal.baseUrlApplied}
+                  >
+                    {analysisModal.baseUrlApplying ? (
+                      <span className="wb-step-spinner" style={{ width: 14, height: 14 }} />
+                    ) : analysisModal.baseUrlApplied ? (
+                      <>
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
+                        Aplicado
+                      </>
+                    ) : (
+                      'Aplicar a todos'
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Close button after success */}
+            {analysisModal.status === 'success' && (
+              <button
+                type="button"
+                className="wb-analysis-btn-close"
+                onClick={() => setAnalysisModal((prev) => ({ ...prev, isOpen: false }))}
+              >
+                Listo
+              </button>
             )}
 
             {analysisModal.status === 'error' && (
