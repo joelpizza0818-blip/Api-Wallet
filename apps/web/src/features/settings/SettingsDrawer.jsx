@@ -15,6 +15,23 @@ const AVATAR_PRESETS = [
   'https://api.dicebear.com/7.x/bottts/svg?seed=Quantum',
 ];
 
+const ANALYSIS_MODAL_DEFAULTS = {
+  isOpen: false,
+  status: 'analyzing',
+  targetName: '',
+  stepIndex: 0,
+  message: '',
+  error: '',
+  collectionsCount: 0,
+  importedCount: 0,
+  filesAnalyzedCount: 0,
+  configKeysCount: 0,
+  collectionIds: [],
+  baseUrl: '',
+  baseUrlApplied: false,
+  baseUrlApplying: false,
+};
+
 function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteProject }) {
   const navigate = useNavigate();
   const { confirm, alert: showAlert } = useFeedback();
@@ -133,20 +150,7 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
   const [importMsg, setImportMsg] = useState('');
   const [githubUrl, setGithubUrl] = useState('');
   const [projectImporting, setProjectImporting] = useState(false);
-  const [analysisModal, setAnalysisModal] = useState({
-    isOpen: false,
-    status: 'analyzing',
-    targetName: '',
-    stepIndex: 0,
-    message: '',
-    error: '',
-    collectionsCount: 0,
-    importedCount: 0,
-    collectionIds: [],
-    baseUrl: '',
-    baseUrlApplied: false,
-    baseUrlApplying: false,
-  });
+  const [analysisModal, setAnalysisModal] = useState(ANALYSIS_MODAL_DEFAULTS);
 
 
   const handleCloseModal = () => {
@@ -158,15 +162,17 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
   };
 
   const applyBaseUrl = async () => {
-    const { collectionIds, baseUrl } = analysisModal;
-    if (!baseUrl.trim() || !collectionIds.length) return;
+    const collectionIds = Array.isArray(analysisModal.collectionIds) ? analysisModal.collectionIds : [];
+    const baseUrl = typeof analysisModal.baseUrl === 'string' ? analysisModal.baseUrl : '';
+    const trimmedBaseUrl = baseUrl.trim();
+    if (!trimmedBaseUrl || !collectionIds.length) return;
     setAnalysisModal((prev) => ({ ...prev, baseUrlApplying: true }));
     try {
       const response = await fetch(`${API_URL}/api/workspaces/${activeWorkspaceId}/import-project/apply-base-url`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ collectionIds, baseUrl: baseUrl.trim() }),
+        body: JSON.stringify({ collectionIds, baseUrl: trimmedBaseUrl }),
       });
       if (!response.ok) throw new Error('No se pudo aplicar la base URL');
       setAnalysisModal((prev) => ({ ...prev, baseUrlApplied: true, baseUrlApplying: false }));
@@ -177,6 +183,7 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
   const importProject = async ({ files, repositoryUrl = '' }) => {
     const targetLabel = repositoryUrl || (files?.length ? `Carpeta local (${files.length} archivos)` : 'Proyecto');
     setAnalysisModal({
+      ...ANALYSIS_MODAL_DEFAULTS,
       isOpen: true,
       status: 'analyzing',
       targetName: targetLabel,
@@ -184,7 +191,6 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
       message: 'Leyendo estructura y archivos del proyecto...',
       error: '',
       collectionsCount: 0,
-      importedCount: 0,
     });
     setProjectImporting(true);
 
@@ -214,6 +220,7 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
       const colCount = collections?.length || 1;
 
       setAnalysisModal({
+        ...ANALYSIS_MODAL_DEFAULTS,
         isOpen: true,
         status: 'success',
         collectionIds: (collections || []).map((c) => c.id),
@@ -1221,7 +1228,7 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
                     type="text"
                     className="wb-base-url-input"
                     placeholder="https://api.miservicio.com"
-                    value={analysisModal.baseUrl}
+                    value={analysisModal.baseUrl || ''}
                     onChange={(e) => setAnalysisModal((prev) => ({ ...prev, baseUrl: e.target.value, baseUrlApplied: false }))}
                     disabled={analysisModal.baseUrlApplied || analysisModal.baseUrlApplying}
                   />
@@ -1229,7 +1236,7 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
                     type="button"
                     className={`wb-base-url-btn${analysisModal.baseUrlApplied ? ' wb-base-url-btn--done' : ''}`}
                     onClick={analysisModal.baseUrlApplied ? undefined : applyBaseUrl}
-                    disabled={!analysisModal.baseUrl.trim() || analysisModal.baseUrlApplying || analysisModal.baseUrlApplied}
+                    disabled={!String(analysisModal.baseUrl || '').trim() || analysisModal.baseUrlApplying || analysisModal.baseUrlApplied}
                   >
                     {analysisModal.baseUrlApplying ? (
                       <span className="wb-step-spinner" style={{ width: 14, height: 14 }} />
