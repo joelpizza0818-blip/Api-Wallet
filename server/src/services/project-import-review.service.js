@@ -1,4 +1,4 @@
-const { generateReply } = require('../controllers/ai.controller');
+const { generateReviewReply } = require('../controllers/ai.controller');
 
 const MAX_REVIEW_FILES = 12;
 const MAX_FILE_CHARS = 6000;
@@ -6,8 +6,7 @@ const MAX_ENDPOINTS = 150;
 const MAX_ATTEMPTS = 2;
 
 function isReviewEnabled() {
-  return process.env.IMPORT_AI_REVIEW_ENABLED !== 'false'
-    && Boolean(process.env.API_KEY_GEMINI1 || process.env.API_KEY_GEMINI2);
+  return Boolean(process.env.API_KEY_GEMINI1 || process.env.API_KEY_GEMINI2);
 }
 
 function redactContent(file) {
@@ -65,7 +64,7 @@ async function reviewImport(files, analysis) {
   let lastReview = null;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
     try {
-      lastReview = parseReviewResponse(await generateReply([
+      lastReview = parseReviewResponse(await generateReviewReply([
         { role: 'user', content: buildReviewPrompt(files, analysis, attempt) },
       ]));
       lastReview.attempts = attempt;

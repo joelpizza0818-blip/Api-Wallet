@@ -249,10 +249,16 @@ export function WorkspaceProvider({ children }) {
   };
   const deleteProject = async () => {
     if (!activeProjectId) return;
-    const response = await fetch(`${API_URL}/api/projects/${activeProjectId}`, { method: 'DELETE', credentials: 'include' });
+    const projectId = activeProjectId;
+    const response = await fetch(`${API_URL}/api/projects/${projectId}`, { method: 'DELETE', credentials: 'include' });
+    if (response.status === 404) {
+      await loadWorkspace(activeWorkspaceId);
+      return { alreadyRemoved: true };
+    }
     if (!response.ok) throw new Error('No se pudo eliminar el proyecto');
-    setProjects((items) => items.filter((item) => item.id !== activeProjectId));
+    setProjects((items) => items.filter((item) => item.id !== projectId));
     await loadWorkspace(activeWorkspaceId);
+    return { alreadyRemoved: false };
   };
   const restoreDefaultWorkspace = async () => {
     if (!activeWorkspaceId) return;

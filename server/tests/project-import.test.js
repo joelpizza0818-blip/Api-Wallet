@@ -10,6 +10,7 @@ const {
   joinBaseUrl,
 } = require('../src/services/project-import.service');
 const { parseReviewResponse, buildReviewPrompt } = require('../src/services/project-import-review.service');
+const { REVIEW_SYSTEM_PROMPT } = require('../src/controllers/ai.controller');
 
 describe('Project importer', () => {
   it('detects fetch and Axios endpoints and resolves .env URLs without exposing secrets', () => {
@@ -51,6 +52,12 @@ describe('Project importer', () => {
 
     assert.match(prompt, /\/api\/api/);
     assert.match(prompt, /No asumas que \/api es un prefijo universal/);
+  });
+
+  it('keeps reviewer rules separate from the general chat prompt', () => {
+    assert.match(REVIEW_SYSTEM_PROMPT, /revisor técnico de importaciones/);
+    assert.match(REVIEW_SYSTEM_PROMPT, /montajes de routers y prefijos/);
+    assert.match(REVIEW_SYSTEM_PROMPT, /Nunca corrijas una ruta por estilo/);
   });
 
   it('detects Express routes, app methods, and chained routes with folder grouping and body generation', () => {

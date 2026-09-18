@@ -432,15 +432,21 @@ export function ConfirmDeleteApisModal({ isOpen, onClose }) {
 
 export function ConfirmDeleteProjectModal({ isOpen, onClose }) {
   const { deleteProject } = useWorkspace();
+  const { notify } = useFeedback();
   const [confirmWord, setConfirmWord] = useState('');
 
   if (!isOpen) return null;
 
   const handleConfirm = async () => {
     if (confirmWord.trim().toUpperCase() === 'BORRAR') {
-      await deleteProject();
-      setConfirmWord('');
-      onClose();
+      try {
+        const result = await deleteProject();
+        setConfirmWord('');
+        onClose();
+        if (result?.alreadyRemoved) notify('El proyecto ya no existía. Se actualizó el workspace.');
+      } catch (error) {
+        notify(error.message || 'No se pudo eliminar el proyecto.');
+      }
     }
   };
 
