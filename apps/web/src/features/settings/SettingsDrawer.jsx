@@ -26,6 +26,7 @@ const ANALYSIS_MODAL_DEFAULTS = {
   importedCount: 0,
   filesAnalyzedCount: 0,
   configKeysCount: 0,
+  aiReview: null,
   collectionIds: [],
   baseUrl: '',
   baseUrlApplied: false,
@@ -201,6 +202,9 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
     const stepTimer2 = setTimeout(() => {
       setAnalysisModal((prev) => prev.isOpen && prev.status === 'analyzing' ? { ...prev, stepIndex: 2, message: 'Generando colecciones y requests en Api-Wallet...' } : prev);
     }, 2400);
+    const stepTimer3 = setTimeout(() => {
+      setAnalysisModal((prev) => prev.isOpen && prev.status === 'analyzing' ? { ...prev, stepIndex: 3, message: 'Revisando rutas y posibles inconsistencias con IA...' } : prev);
+    }, 3600);
 
     try {
       const targetProjectId = activeProjectId || projects?.[0]?.id;
@@ -215,8 +219,9 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
 
       clearTimeout(stepTimer1);
       clearTimeout(stepTimer2);
+      clearTimeout(stepTimer3);
 
-      const { imported, filesAnalyzed, collections, configKeys } = result.data || {};
+      const { imported, filesAnalyzed, collections, configKeys, aiReview } = result.data || {};
       const colCount = collections?.length || 1;
 
       setAnalysisModal({
@@ -225,19 +230,21 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
         status: 'success',
         collectionIds: (collections || []).map((c) => c.id),
         targetName: targetLabel,
-        stepIndex: 3,
+        stepIndex: 4,
         message: '¡Análisis completado con éxito!',
         error: '',
         importedCount: imported || 0,
         collectionsCount: colCount,
         filesAnalyzedCount: filesAnalyzed || 0,
         configKeysCount: configKeys?.length || 0,
+        aiReview: aiReview || null,
       });
 
       setGithubUrl('');
     } catch (error) {
       clearTimeout(stepTimer1);
       clearTimeout(stepTimer2);
+      clearTimeout(stepTimer3);
       setAnalysisModal((prev) => ({
         ...prev,
         status: 'error',
@@ -1206,6 +1213,19 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
                 </div>
                 <span>Generación de colecciones y requests en Api-Wallet</span>
               </div>
+
+              <div className={`wb-analysis-step-item ${analysisModal.status === 'success' ? 'wb-analysis-step-item--done' : analysisModal.stepIndex === 3 ? 'wb-analysis-step-item--active' : 'wb-analysis-step-item--pending'}`}>
+                <div className="wb-analysis-step-icon">
+                  {analysisModal.status === 'success' ? (
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#10b981" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
+                  ) : analysisModal.stepIndex === 3 && analysisModal.status === 'analyzing' ? (
+                    <div className="wb-step-spinner" />
+                  ) : (
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="8" /></svg>
+                  )}
+                </div>
+                <span>Revisión de consistencia con IA</span>
+              </div>
             </div>
 
             {/* Results / Error Box */}
@@ -1213,6 +1233,15 @@ function SettingsDrawer({ isOpen, onClose, onConfirmDeleteApis, onConfirmDeleteP
               <div className="wb-analysis-result-box wb-analysis-result-box--success">
                 <strong>✓ {analysisModal.importedCount} endpoints importados</strong>
                 <div>Organizados en {analysisModal.collectionsCount} colecciones por carpeta/módulo.</div>
+                {analysisModal.aiReview?.status === 'review' && (
+                  <div>La revisión encontró {analysisModal.aiReview.issues?.length || 0} punto(s) para revisar.</div>
+                )}
+                {analysisModal.aiReview?.status === 'skipped' && (
+                  <div>Revisión IA omitida: no hay un proveedor configurado.</div>
+                )}
+                {analysisModal.aiReview?.status === 'unavailable' && (
+                  <div>Revisión IA omitida: el modelo o la API key no están disponibles.</div>
+                )}
               </div>
             )}
 

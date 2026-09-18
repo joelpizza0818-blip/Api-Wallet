@@ -7,7 +7,9 @@ const {
   inferRequestBody,
   getSampleValueForField,
   resolveOpenApiSchema,
+  joinBaseUrl,
 } = require('../src/services/project-import.service');
+const { parseReviewResponse, buildReviewPrompt } = require('../src/services/project-import-review.service');
 
 describe('Project importer', () => {
   it('detects fetch and Axios endpoints and resolves .env URLs without exposing secrets', () => {
@@ -22,6 +24,33 @@ describe('Project importer', () => {
     assert.equal(result.endpoints[1].method, 'POST');
     assert.ok(result.endpoints[1].body.includes('email'));
     assert.ok(!JSON.stringify(result).includes('secret-value'));
+  });
+
+  it('preserves explicit repeated api segments and avoids duplication at the base boundary', () => {
+    const result = analyzeFiles([
+      { name: '.env', content: 'API_URL="https://api.example.com/api"' },
+      { name: 'src/client.js', content: 'fetch(`${API_URL}/api/users`);' },
+    ]);
+
+    assert.equal(result.endpoints.length, 1);
+    assert.equal(result.endpoints[0].url, 'https://api.example.com/api/api/users');
+    assert.equal(joinBaseUrl('https://api.example.com/api', '/api/users'), 'https://api.example.com/api/users');
+    assert.equal(joinBaseUrl('https://api.example.com', '/api/users'), 'https://api.example.com/api/users');
+  });
+
+  it('parses the AI review contract without allowing arbitrary endpoint rewrites', () => {
+    const review = parseReviewResponse('```json\n{"status":"review","issues":[{"severity":"high","message":"Ruta incompleta","endpointKey":"GET:/users","evidence":"routes.js: app.get(\'/users\')"}],"suggestions":["Revisar el montaje"]}\n```');
+
+    assert.equal(review.status, 'review');
+    assert.equal(review.issues[0].endpointKey, 'GET:/users');
+    assert.equal(Object.prototype.hasOwnProperty.call(review, 'endpoints'), false);
+  });
+
+  it('instructs the AI reviewer to preserve explicit api paths', () => {
+    const prompt = buildReviewPrompt([{ name: 'routes.js', content: "router.get('/api/api/users', handler);" }], { endpoints: [{ method: 'GET', path: '/api/api/users' }] }, 1);
+
+    assert.match(prompt, /\/api\/api/);
+    assert.match(prompt, /No asumas que \/api es un prefijo universal/);
   });
 
   it('detects Express routes, app methods, and chained routes with folder grouping and body generation', () => {
@@ -121,6 +150,44 @@ describe('Project importer', () => {
     assert.equal(result.endpoints.some((endpoint) => endpoint.path === '/chats'), false);
     assert.ok(result.endpoints.some((endpoint) => endpoint.path === '/health'));
     assert.equal(result.endpoints.some((endpoint) => endpoint.path === '/api/health'), false);
+  });
+
+  it('does not duplicate an api prefix already present in a mounted route', () => {
+    const result = analyzeFiles([
+      {
+        name: 'app.js',
+        content: `
+          const router = express.Router();
+          app.use('/api', router);
+          router.post('/api/products', createProduct);
+        `,
+      },
+    ]);
+
+    assert.equal(result.endpoints.filter((endpoint) => endpoint.method === 'POST').length, 1);
+    assert.equal(result.endpoints[0].path, '/api/products');
+    assert.equal(result.endpoints[0].url, '{{baseUrl}}/api/products');
+  });
+
+  it('preserves distinct mounted and unmounted routes', () => {
+    const result = analyzeFiles([
+      {
+        name: 'app.js',
+        content: `
+          const router = express.Router();
+          app.use('/api', router);
+          router.get('/users', listUsers);
+        `,
+      },
+      {
+        name: 'client.js',
+        content: `fetch('/users');`,
+      },
+    ]);
+
+    assert.equal(result.endpoints.filter((endpoint) => endpoint.method === 'GET').length, 2);
+    assert.ok(result.endpoints.some((endpoint) => endpoint.path === '/api/users'));
+    assert.ok(result.endpoints.some((endpoint) => endpoint.path === '/users'));
   });
 
   it('generates body from Zod schemas and req.body code patterns', () => {

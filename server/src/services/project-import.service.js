@@ -57,7 +57,9 @@ function resolveTemplate(value, env = {}) {
 
 function normalizeUrl(raw, env = {}) {
   const resolved = resolveTemplate(raw.trim().replace(/^["'`]|["'`]$/g, ''), env);
-  if (/^https?:\/\//i.test(resolved)) return resolved;
+  if (/^https?:\/\//i.test(resolved)) {
+    return resolved;
+  }
   if (resolved.startsWith('{{baseUrl}}')) return resolved;
   return resolved.startsWith('/') ? resolved : `/${resolved}`;
 }
@@ -311,7 +313,21 @@ function joinRoutePaths(prefix, routePath) {
   const normalizedRoute = routePath.trim();
   if (normalizedPrefix === '/') return normalizedRoute.startsWith('/') ? normalizedRoute : `/${normalizedRoute}`;
   if (normalizedRoute === '/') return normalizedPrefix;
+  if (normalizedRoute === normalizedPrefix || normalizedRoute.startsWith(`${normalizedPrefix}/`)) return normalizedRoute;
   return `${normalizedPrefix}/${normalizedRoute.replace(/^\/+/, '')}`.replace(/([^:])\/{2,}/g, '$1/');
+}
+
+function joinBaseUrl(baseUrl, endpointPath) {
+  const base = baseUrl.trim().replace(/\/+$/, '');
+  const subPath = endpointPath.startsWith('/') ? endpointPath : `/${endpointPath}`;
+  try {
+    const parsedBase = new URL(base);
+    const basePath = parsedBase.pathname.replace(/\/+$/, '');
+    if (basePath && basePath !== '/' && (subPath === basePath || subPath.startsWith(`${basePath}/`))) {
+      return `${base}${subPath.slice(basePath.length) || '/'}`;
+    }
+  } catch {}
+  return `${base}${subPath}`;
 }
 
 function resolveMountedFile(record, expression, fileLookup) {
@@ -1172,7 +1188,8 @@ function analyzeFiles(inputFiles) {
     routePrefixes: routePrefixMap.get(normalizeModuleFileName(file.name)) || [],
   }));
 
-  // Deduplicate endpoints by method + path
+  // Deduplicate only exact method/path matches. Explicit paths such as
+  // /api/api are valid and must not be silently rewritten.
   const seen = new Set();
   const uniqueEndpoints = [];
   for (const ep of endpoints) {
@@ -1223,6 +1240,7 @@ module.exports = {
   normalizeUrl,
   getPath,
   getFolderName,
+  joinBaseUrl,
   getSampleValueForField,
   inferRequestBody,
   resolveOpenApiSchema,

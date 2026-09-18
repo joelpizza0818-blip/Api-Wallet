@@ -7,7 +7,7 @@
     "dev": "concurrently --kill-others-on-fail --names backend,frontend --prefix-colors blue,green \"npm --prefix server run dev\" \"npm --prefix apps/web run dev\"",
     "dev:backend": "npm --prefix server run dev",
     "dev:frontend": "npm --prefix apps/web run dev",
-    "dev:desktop": "npm --prefix apps/desktop run dev",
+    "dev:desktop": "concurrently --kill-others-on-fail --names backend,desktop --prefix-colors blue,green \"npm --prefix server run dev\" \"npm --prefix apps/desktop run dev\"",
     "build:desktop": "npm --prefix apps/desktop run build",
     "test": "npm --prefix server test"
   },

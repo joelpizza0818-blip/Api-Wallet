@@ -1,6 +1,7 @@
 const prisma = require('../config/database');
 const { WRITE_ROLES, projectAccess, requireWorkspaceRole } = require('../services/authorization.service');
-const { analyzeFiles, readGithubRepository } = require('../services/project-import.service');
+const { analyzeFiles, readGithubRepository, joinBaseUrl } = require('../services/project-import.service');
+const { reviewImport } = require('../services/project-import-review.service');
 
 async function importProject(req, res) {
   const { workspaceId } = req.params;
@@ -33,12 +34,14 @@ async function importProject(req, res) {
   }
 
   const analysis = analyzeFiles(files);
+  const aiReview = await reviewImport(files, analysis);
 
   if (!analysis.endpoints.length) {
     return res.status(200).json({
       success: true,
       data: {
         ...analysis,
+        aiReview,
         collectionId: null,
         imported: 0,
         message: 'Se analizaron los archivos pero no se detectaron endpoints de rutas o clientes HTTP.',
@@ -106,6 +109,7 @@ async function importProject(req, res) {
     success: true,
     data: {
       ...analysis,
+      aiReview,
       collections: createdCollections,
       imported: totalImported,
       totalEndpointsDetected: analysis.endpoints.length,
@@ -155,7 +159,7 @@ async function applyBaseUrl(req, res) {
       cleanSubPath = '/' + cleanSubPath;
     }
 
-    let newUrl = base + cleanSubPath;
+    let newUrl = joinBaseUrl(base, cleanSubPath);
     newUrl = newUrl.replace(/([^:])\/{2,}/g, '$1/');
 
     await prisma.apiRequest.update({
