@@ -11,4 +11,5 @@ router.route('/projects/:projectId/flows').get(c.listFlows).post(c.createFlow); 
 router.get('/projects/:projectId/executions', c.listExecutions);
 router.route('/projects/:projectId/documents').get(c.listDocuments).post(c.createDocument); router.route('/documents/:documentId').patch(c.updateDocument).delete(c.deleteDocument);
 router.route('/projects/:projectId/mocks').get(c.listMocks).post(c.createMock); router.route('/mocks/:mockId').patch(c.updateMock).delete(c.deleteMock); router.post('/mocks/:mockId/routes', c.addMockRoute); router.delete('/mock-routes/:mockRouteId', c.deleteMockRoute);
+router.route('/projects/:projectId/datasets').get(c.listDatasets).post(c.createDataset); router.route('/datasets/:datasetId').patch(c.updateDataset).delete(c.deleteDataset); router.post('/datasets/:datasetId/run', c.runDataset);
 module.exports = router;

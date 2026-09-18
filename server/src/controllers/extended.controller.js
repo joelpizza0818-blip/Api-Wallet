@@ -4,6 +4,8 @@ const { WRITE_ROLES, ADMIN_ROLES, requireWorkspaceRole, projectAccess } = requir
 const { sendWorkspaceInvitation } = require('../services/email.service');
 const flowService = require('../services/flow.service');
 const { createActivity } = require('../services/activity.service');
+const datasetService = require('../services/dataset.service');
+const { executeRequest } = require('../services/requestRunner.service');
 
 const fail = (message, statusCode = 400) => Object.assign(new Error(message), { statusCode });
 const respond = (res, data, status = 200) => res.status(status).json({ success: true, data });
@@ -377,7 +379,9 @@ async function addMockRoute(req, res) {
 
   await requireWorkspaceRole(req.user.id, mock.project.workspaceId, WRITE_ROLES);
   const method = (req.body.method || 'GET').toUpperCase();
-  if (!['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'].includes(method) || !req.body.path?.startsWith('/')) {
+  const routePath = req.body.path?.trim();
+  const statusCode = Number(req.body.statusCode || 200);
+  if (!['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'].includes(method) || !routePath?.startsWith('/') || !Number.isInteger(statusCode) || statusCode < 100 || statusCode > 599) {
     throw fail('Invalid mock route');
   }
 
@@ -388,8 +392,8 @@ async function addMockRoute(req, res) {
         mockServerId: mock.id,
         requestId: req.body.requestId || null,
         method,
-        path: req.body.path,
-        statusCode: req.body.statusCode || 200,
+        path: routePath === '/' ? '/' : `/${routePath.replace(/^\/+|\/+$/g, '')}`,
+        statusCode,
         responseHeaders: Array.isArray(req.body.responseHeaders) ? req.body.responseHeaders : [],
         responseBody: req.body.responseBody || null,
       },
@@ -475,6 +479,56 @@ async function removeMember(req, res) {
   respond(res, { message: 'Miembro eliminado correctamente' });
 }
 
+// =================== DATASETS ===================
+async function listDatasets(req, res) {
+  await projectAccess(req.user.id, req.params.projectId);
+  respond(res, await datasetService.listDatasets(req.params.projectId));
+}
+
+async function createDataset(req, res) {
+  const project = await projectAccess(req.user.id, req.params.projectId, WRITE_ROLES);
+  respond(res, await datasetService.createDataset(project.id, req.body), 201);
+}
+
+async function updateDataset(req, res) {
+  const dataset = await datasetService.getDataset(req.params.datasetId);
+  await projectAccess(req.user.id, dataset.projectId, WRITE_ROLES);
+  respond(res, await datasetService.updateDataset(dataset.id, req.body));
+}
+
+async function deleteDataset(req, res) {
+  const dataset = await datasetService.getDataset(req.params.datasetId);
+  await projectAccess(req.user.id, dataset.projectId, WRITE_ROLES);
+  await datasetService.deleteDataset(dataset.id);
+  res.status(204).end();
+}
+
+async function runDataset(req, res) {
+  const dataset = await datasetService.getDataset(req.params.datasetId);
+  await projectAccess(req.user.id, dataset.projectId, WRITE_ROLES);
+  if (!req.body?.requestId) throw fail('requestId is required');
+
+  const request = await prisma.apiRequest.findUnique({
+    where: { id: req.body.requestId },
+    include: { collection: true },
+  });
+  if (!request || request.collection.projectId !== dataset.projectId) throw fail('Request does not belong to the dataset project', 404);
+
+  const rows = Array.isArray(dataset.rows) ? dataset.rows : [];
+  const requestedLimit = Number(req.body.limit);
+  const runLimit = Number.isInteger(requestedLimit) && requestedLimit > 0 ? Math.min(requestedLimit, 1000) : Math.min(rows.length, 1000);
+  const results = [];
+  for (let index = 0; index < runLimit; index += 1) {
+    const result = await executeRequest(request.id, {
+      environmentId: req.body.environmentId || null,
+      apiKeyId: req.body.apiKeyId || null,
+      variables: rows[index],
+    });
+    results.push({ row: index + 1, ...result });
+  }
+  respond(res, { datasetId: dataset.id, requestId: request.id, total: results.length, available: rows.length, truncated: runLimit < rows.length, results });
+}
+
 module.exports = {
   leaveWorkspace,
   removeMember,
@@ -502,4 +556,9 @@ module.exports = {
   updateMock,
   deleteMock,
   deleteMockRoute,
+  listDatasets,
+  createDataset,
+  updateDataset,
+  deleteDataset,
+  runDataset,
 };

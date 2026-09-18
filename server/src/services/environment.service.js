@@ -126,16 +126,24 @@ async function getDefaultEnvironment(projectId) {
  * Resolves templated variables like `{{baseUrl}}` and encrypted `{{SECRET_NAME}}`
  * using the given environment.
  */
-async function resolveEnvironmentVariables(templateText, environmentId) {
+async function resolveEnvironmentVariables(templateText, environmentId, runtimeVariables = {}) {
   if (!templateText || typeof templateText !== 'string') return templateText;
-  if (!environmentId) return templateText;
+  if (!environmentId) {
+    return templateText.replace(/\{\{\s*([a-zA-Z0-9_-]+)\s*\}\}/g, (match, varName) => (
+      Object.prototype.hasOwnProperty.call(runtimeVariables, varName) ? String(runtimeVariables[varName] ?? '') : match
+    ));
+  }
 
   const env = await prisma.environment.findUnique({
     where: { id: environmentId },
     include: { secrets: true },
   });
 
-  if (!env) return templateText;
+  if (!env) {
+    return templateText.replace(/\{\{\s*([a-zA-Z0-9_-]+)\s*\}\}/g, (match, varName) => (
+      Object.prototype.hasOwnProperty.call(runtimeVariables, varName) ? String(runtimeVariables[varName] ?? '') : match
+    ));
+  }
 
   // Build variable dictionary
   const variableMap = new Map();
@@ -157,6 +165,10 @@ async function resolveEnvironmentVariables(templateText, environmentId) {
     } catch {
       // Ignore unresolvable individual secrets
     }
+  }
+
+  for (const [name, value] of Object.entries(runtimeVariables || {})) {
+    if (/^[a-zA-Z0-9_-]+$/.test(name)) variableMap.set(name, value === null || value === undefined ? '' : String(value));
   }
 
   // Replace all {{variableName}}

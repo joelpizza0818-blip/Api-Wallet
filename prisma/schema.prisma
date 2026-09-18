@@ -232,6 +232,7 @@ model Project {
   flows Flow[]
   documents Document[]
   mocks MockServer[]
+  datasets Dataset[]
   @@unique([workspaceId, name])
   @@index([workspaceId, status])
   @@map("projects")
@@ -315,6 +316,21 @@ model Secret {
   environment Environment @relation(fields: [environmentId], references: [id], onDelete: Cascade)
   @@unique([environmentId, name])
   @@map("secrets")
+}
+
+model Dataset {
+  id String @id @default(cuid())
+  projectId String
+  name String
+  description String?
+  columns Json @default("[]")
+  rows Json @default("[]")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  @@unique([projectId, name])
+  @@index([projectId, updatedAt])
+  @@map("datasets")
 }
 
 model ApiKey {

@@ -94,32 +94,32 @@ async function resolveAuthorization(requestAuth = {}, collectionAuth = {}) {
 /**
  * Resolves template variables and secrets in request fields.
  */
-async function resolveRequestVariables(request, environmentId) {
+async function resolveRequestVariables(request, environmentId, runtimeVariables = {}) {
   const resolved = { ...request };
 
-  if (environmentId) {
+  if (environmentId || Object.keys(runtimeVariables).length) {
     if (resolved.url) {
-      resolved.url = await resolveEnvironmentVariables(resolved.url, environmentId);
+      resolved.url = await resolveEnvironmentVariables(resolved.url, environmentId, runtimeVariables);
     }
     if (resolved.path) {
-      resolved.path = await resolveEnvironmentVariables(resolved.path, environmentId);
+      resolved.path = await resolveEnvironmentVariables(resolved.path, environmentId, runtimeVariables);
     }
     if (resolved.body) {
-      resolved.body = await resolveEnvironmentVariables(resolved.body, environmentId);
+      resolved.body = await resolveEnvironmentVariables(resolved.body, environmentId, runtimeVariables);
     }
     if (Array.isArray(resolved.headers)) {
       resolved.headers = await Promise.all(
         resolved.headers.map(async (h) => ({
-          key: await resolveEnvironmentVariables(h.key, environmentId),
-          value: await resolveEnvironmentVariables(h.value, environmentId),
+          key: await resolveEnvironmentVariables(h.key, environmentId, runtimeVariables),
+          value: await resolveEnvironmentVariables(h.value, environmentId, runtimeVariables),
         }))
       );
     }
     if (Array.isArray(resolved.params)) {
       resolved.params = await Promise.all(
         resolved.params.map(async (p) => ({
-          key: await resolveEnvironmentVariables(p.key, environmentId),
-          value: await resolveEnvironmentVariables(p.value, environmentId),
+          key: await resolveEnvironmentVariables(p.key, environmentId, runtimeVariables),
+          value: await resolveEnvironmentVariables(p.value, environmentId, runtimeVariables),
         }))
       );
     }
@@ -127,7 +127,7 @@ async function resolveRequestVariables(request, environmentId) {
       resolved.authorization = { ...resolved.authorization };
       for (const field of ['key', 'value', 'token', 'username', 'password']) {
         if (typeof resolved.authorization[field] === 'string') {
-          resolved.authorization[field] = await resolveEnvironmentVariables(resolved.authorization[field], environmentId);
+          resolved.authorization[field] = await resolveEnvironmentVariables(resolved.authorization[field], environmentId, runtimeVariables);
         }
       }
     }
@@ -139,8 +139,8 @@ async function resolveRequestVariables(request, environmentId) {
 /**
  * Builds standard request parameters (url, method, headers, body).
  */
-async function buildRequest(request, environmentId = null) {
-  const resolved = await resolveRequestVariables(request, environmentId);
+async function buildRequest(request, environmentId = null, runtimeVariables = {}) {
+  const resolved = await resolveRequestVariables(request, environmentId, runtimeVariables);
 
   // Construct target URL
   let fullUrl = resolved.url || resolved.path;
@@ -238,7 +238,7 @@ async function executeRequest(requestId, options = {}) {
   let errorMessage = null;
 
   try {
-    const built = await buildRequest(request, environmentId);
+    const built = await buildRequest(request, environmentId, options.variables || {});
     const destination = await safeUrl(built.url);
     const preScript = request.preRequestScript || request.collection?.preRequestScript || '';
     if (preScript) {

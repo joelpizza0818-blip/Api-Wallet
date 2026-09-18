@@ -30,4 +30,20 @@ describe('Request runner unit behavior', () => {
     assert.strictEqual(hasSensitiveQueryData(new URL('https://example.com/callback?token=secret')), true);
     assert.strictEqual(hasSensitiveQueryData(new URL('https://example.com/items?page=2')), false);
   });
+
+  it('injects dataset row variables into request fields', async () => {
+    const result = await buildRequest({
+      url: 'https://example.com/users/{{userId}}',
+      method: 'POST',
+      headers: [{ key: 'X-Test-User', value: '{{email}}' }],
+      params: [{ key: 'tenant', value: '{{tenant}}' }],
+      body: '{"email":"{{email}}"}',
+      authorization: { type: 'bearer', token: '{{token}}' },
+    }, null, { userId: '42', email: 'user@example.com', tenant: 'acme', token: 'row-token' });
+
+    assert.strictEqual(result.url, 'https://example.com/users/42?tenant=acme');
+    assert.strictEqual(result.headers['X-Test-User'], 'user@example.com');
+    assert.strictEqual(result.headers.Authorization, 'Bearer row-token');
+    assert.strictEqual(result.body, '{"email":"user@example.com"}');
+  });
 });
