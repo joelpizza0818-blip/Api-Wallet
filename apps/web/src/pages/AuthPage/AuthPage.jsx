@@ -21,27 +21,40 @@ function AuthPage({ mode }) {
   const isRegister = mode === 'register';
   const title = isRegister ? 'Crea tu cuenta' : 'Bienvenido de nuevo';
   const subtitle = isRegister ? 'Organiza tus APIs y credenciales desde un solo lugar.' : 'Inicia sesión para continuar con API-Wallet.';
-  const { login, register, continueWithGithub } = useAuth();
+  const { login, register, continueWithGithub, refreshSession } = useAuth();
   const [verificationMessage, setVerificationMessage] = useState('');
+  const [blockedCredentials, setBlockedCredentials] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const { notify } = useFeedback();
 
-  async function handleSubmit(event) {
-    event.preventDefault();
-    const formData = new FormData(event.currentTarget);
-    const email = formData.get('email');
-    const name = formData.get('name');
-    const password = formData.get('password');
+  async function submitCredentials(credentials) {
+    setIsSubmitting(true);
     try {
-      const result = isRegister ? await register({ name, email, password }) : await login({ email, password });
+      const result = isRegister ? await register(credentials) : await login(credentials);
       if (isRegister && result?.verificationRequired) {
         setVerificationMessage(result.message);
         return;
       }
+      if (!isRegister && !(await refreshSession())) {
+        const error = new Error('La sesión no pudo guardarse en este navegador.');
+        error.code = 'AUTH_SESSION_BLOCKED';
+        throw error;
+      }
       const inviteToken = new URLSearchParams(location.search).get('invite');
       navigate(inviteToken ? `/invitations/accept?token=${encodeURIComponent(inviteToken)}` : '/dashboard');
-    } catch (error) { notify(error.message, 'error'); }
+    } catch (error) {
+      if (error.code === 'AUTH_CONNECTION_BLOCKED' || error.code === 'AUTH_SESSION_BLOCKED') {
+        setBlockedCredentials(credentials);
+      } else notify(error.message, 'error');
+    } finally { setIsSubmitting(false); }
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    await submitCredentials({ name: formData.get('name'), email: formData.get('email'), password: formData.get('password') });
   }
 
   return (
@@ -63,7 +76,7 @@ function AuthPage({ mode }) {
             {isRegister && <label>Nombre<input type="text" name="name" autoComplete="name" placeholder="Tu nombre" /></label>}
             <label>Correo electrónico<input type="email" name="email" autoComplete="email" placeholder="tu@correo.com" required /></label>
             <label>Contraseña<input type="password" name="password" autoComplete={isRegister ? 'new-password' : 'current-password'} placeholder="••••••••" required /></label>
-            <button className="btn btn--primary btn--md" type="submit">{isRegister ? 'Crear cuenta' : 'Iniciar sesión'}</button>
+            <button className="btn btn--primary btn--md" type="submit" disabled={isSubmitting}>{isRegister ? 'Crear cuenta' : 'Iniciar sesión'}</button>
           </form>
           {verificationMessage && <p role="status">{verificationMessage}</p>}
           {!window.__TAURI_INTERNALS__ && window.location.protocol !== 'tauri:' && window.location.hostname !== 'tauri.local' && <>
@@ -83,6 +96,17 @@ function AuthPage({ mode }) {
           )}
         </div>
       </section>
+      {blockedCredentials && <div className="auth-blocked-backdrop" role="presentation">
+        <section className="auth-blocked-modal" role="dialog" aria-modal="true" aria-labelledby="auth-blocked-title">
+          <div className="auth-blocked-modal__icon" aria-hidden="true">!</div>
+          <h2 id="auth-blocked-title">Brave está bloqueando la autenticación</h2>
+          <p>Brave Shields puede impedir la conexión con el servidor o bloquear la cookie de sesión. Baja Shields para este sitio y vuelve a intentarlo.</p>
+          <div className="auth-blocked-modal__actions">
+            <button className="btn btn--secondary btn--sm" type="button" onClick={() => setBlockedCredentials(null)}>Cerrar</button>
+            <button className="btn btn--primary btn--sm" type="button" onClick={() => { const credentials = blockedCredentials; setBlockedCredentials(null); submitCredentials(credentials); }}>Reintentar</button>
+          </div>
+        </section>
+      </div>}
     </main>
   );
 }

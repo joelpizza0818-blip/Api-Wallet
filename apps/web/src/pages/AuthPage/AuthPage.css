@@ -23,4 +23,11 @@
 .auth-card__switch a { font-weight: var(--font-weight-semibold); text-decoration: none; }
 .auth-card__create-account { display: grid; justify-items: center; gap: var(--spacing-3); margin-top: var(--spacing-6); color: var(--color-text-muted); font-size: var(--font-size-sm); }
 .auth-card__create-account .btn { text-decoration: none; }
+.auth-blocked-backdrop { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: var(--spacing-6); background: rgba(0, 0, 0, .68); }
+.auth-blocked-modal { width: min(100%, 430px); display: grid; gap: var(--spacing-4); padding: var(--spacing-8); color: var(--color-text); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-xl); box-shadow: var(--shadow-lg); }
+.auth-blocked-modal h2, .auth-blocked-modal p { margin: 0; }
+.auth-blocked-modal h2 { font-size: var(--font-size-xl); }
+.auth-blocked-modal p { color: var(--color-text-muted); line-height: var(--line-height-relaxed); }
+.auth-blocked-modal__icon { width: 36px; height: 36px; display: grid; place-items: center; color: var(--color-text); background: var(--color-danger); border-radius: 50%; font-weight: var(--font-weight-bold); }
+.auth-blocked-modal__actions { display: flex; justify-content: flex-end; gap: var(--spacing-3); }
 @media (max-width: 480px) { .auth-page__header { width: min(100% - 2rem, var(--container-max-width)); } .auth-card { padding: var(--spacing-6); } }

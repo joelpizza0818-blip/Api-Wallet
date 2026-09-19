@@ -9,7 +9,13 @@ export function AuthProvider({ children }) {
   const [isAuthLoading, setIsAuthLoading] = useState(true);
 
   const authenticate = async (endpoint, payload) => {
-    const response = await fetch(`${API_URL}/api/auth/${endpoint}`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    let response;
+    try {
+      response = await fetch(`${API_URL}/api/auth/${endpoint}`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    } catch (error) {
+      error.code = 'AUTH_CONNECTION_BLOCKED';
+      throw error;
+    }
     const result = await response.json();
     if (!response.ok) throw new Error(result.message || 'Authentication failed');
     if (result.verificationRequired) return result;
