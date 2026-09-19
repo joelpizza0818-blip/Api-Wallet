@@ -29,6 +29,20 @@ export function AuthProvider({ children }) {
   };
   const login = ({ email, password }) => authenticate('login', { email, password });
   const register = ({ name, email, password }) => authenticate('register', { name, email, password });
+  const checkAuthCookie = async () => {
+    let probeResponse;
+    try {
+      probeResponse = await fetch(`${API_URL}/api/auth/cookie-check`, { credentials: 'include', cache: 'no-store' });
+      if (!probeResponse.ok && probeResponse.status !== 204) throw new Error('Cookie probe request failed');
+      const verificationResponse = await fetch(`${API_URL}/api/auth/cookie-check`, { credentials: 'include', cache: 'no-store' });
+      if (!verificationResponse.ok) throw new Error('Cookie probe verification failed');
+      const result = await verificationResponse.json();
+      return result.supported === true;
+    } catch (error) {
+      error.code = 'AUTH_CONNECTION_BLOCKED';
+      throw error;
+    }
+  };
   const logout = async () => { await fetch(`${API_URL}/api/auth/logout`, { method: 'POST', credentials: 'include' }); setIsAuthenticated(false); setUser(null); };
   const updateProfile = async ({ name, avatar }) => {
     const response = await fetch(`${API_URL}/api/auth/me`, { method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, avatarUrl: avatar }) });
@@ -57,7 +71,7 @@ export function AuthProvider({ children }) {
     finally { setIsAuthLoading(false); }
   }, []);
   useEffect(() => { refreshSession(); }, [refreshSession]);
-  return <AuthContext.Provider value={{ user, isAuthenticated, isAuthLoading, login, register, logout, updateProfile, changePassword, continueWithGithub, refreshSession }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ user, isAuthenticated, isAuthLoading, login, register, logout, updateProfile, changePassword, continueWithGithub, checkAuthCookie, refreshSession }}>{children}</AuthContext.Provider>;
 }
 export function useAuth() {
   const context = useContext(AuthContext);

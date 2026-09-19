@@ -18,6 +18,17 @@ const oauthCookieOptions = {
   maxAge: 7 * 24 * 60 * 60 * 1000,
   path: '/',
 };
+const authProbeCookieOptions = {
+  httpOnly: true,
+  sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+  secure: process.env.NODE_ENV === 'production',
+  maxAge: 60 * 1000,
+  path: '/api/auth',
+};
+
+function hasAuthProbeCookie(req) {
+  return (req.headers.cookie || '').split(';').some((cookie) => cookie.trim().startsWith('api_wallet_cookie_probe='));
+}
 
 function redirectWithSession(req, res, destination = '/auth/callback') {
   const token = createToken(req.user);
@@ -27,6 +38,14 @@ function redirectWithSession(req, res, destination = '/auth/callback') {
 
 router.post('/register', authRateLimit, register);
 router.post('/login', loginRateLimit, login);
+router.get('/cookie-check', (req, res) => {
+  if (hasAuthProbeCookie(req)) {
+    res.clearCookie('api_wallet_cookie_probe', authProbeCookieOptions);
+    return res.json({ supported: true });
+  }
+  res.cookie('api_wallet_cookie_probe', '1', authProbeCookieOptions);
+  return res.status(204).end();
+});
 router.get('/verify-email', verifyEmail);
 
 function hasGithubConfiguration() {

@@ -21,7 +21,7 @@ function AuthPage({ mode }) {
   const isRegister = mode === 'register';
   const title = isRegister ? 'Crea tu cuenta' : 'Bienvenido de nuevo';
   const subtitle = isRegister ? 'Organiza tus APIs y credenciales desde un solo lugar.' : 'Inicia sesión para continuar con API-Wallet.';
-  const { login, register, continueWithGithub, refreshSession } = useAuth();
+  const { login, register, continueWithGithub, checkAuthCookie, refreshSession } = useAuth();
   const [verificationMessage, setVerificationMessage] = useState('');
   const [blockedCredentials, setBlockedCredentials] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -32,6 +32,11 @@ function AuthPage({ mode }) {
   async function submitCredentials(credentials) {
     setIsSubmitting(true);
     try {
+      if (!(await checkAuthCookie())) {
+        const error = new Error('La cookie de sesión está bloqueada en este navegador.');
+        error.code = 'AUTH_SESSION_BLOCKED';
+        throw error;
+      }
       const result = isRegister ? await register(credentials) : await login(credentials);
       if (isRegister && result?.verificationRequired) {
         setVerificationMessage(result.message);
