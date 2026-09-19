@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { LogoIcon } from '../../components/common/Logo/Logo';
 import { useAuth } from '../../features/auth/AuthContext';
 import { useFeedback } from '../../components/common/Feedback/FeedbackContext';
@@ -21,18 +21,39 @@ function AuthPage({ mode }) {
   const isRegister = mode === 'register';
   const title = isRegister ? 'Crea tu cuenta' : 'Bienvenido de nuevo';
   const subtitle = isRegister ? 'Organiza tus APIs y credenciales desde un solo lugar.' : 'Inicia sesión para continuar con API-Wallet.';
-  const { login, register, continueWithGithub, checkAuthCookie, refreshSession } = useAuth();
+  const { login, register, continueWithGithub, checkAuthEnvironment, refreshSession } = useAuth();
   const [verificationMessage, setVerificationMessage] = useState('');
   const [blockedCredentials, setBlockedCredentials] = useState(null);
+  const [authEnvironmentBlocked, setAuthEnvironmentBlocked] = useState(false);
+  const [authEnvironmentChecked, setAuthEnvironmentChecked] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const { notify } = useFeedback();
 
-  async function submitCredentials(credentials) {
+  useEffect(() => {
+    let active = true;
+    checkAuthEnvironment().then((isReady) => {
+      if (!active) return;
+      setAuthEnvironmentBlocked(!isReady);
+      setAuthEnvironmentChecked(true);
+    }).catch(() => {
+      if (!active) return;
+      setAuthEnvironmentBlocked(true);
+      setAuthEnvironmentChecked(true);
+    });
+    return () => { active = false; };
+  }, [checkAuthEnvironment]);
+
+  async function submitCredentials(credentials, skipEnvironmentCheck = false) {
+    if (!skipEnvironmentCheck && (!authEnvironmentChecked || authEnvironmentBlocked)) {
+      setBlockedCredentials(credentials);
+      setAuthEnvironmentBlocked(true);
+      return;
+    }
     setIsSubmitting(true);
     try {
-      if (!(await checkAuthCookie())) {
+      if (!skipEnvironmentCheck && !(await checkAuthEnvironment())) {
         const error = new Error('La cookie de sesión está bloqueada en este navegador.');
         error.code = 'AUTH_SESSION_BLOCKED';
         throw error;
@@ -53,6 +74,22 @@ function AuthPage({ mode }) {
       if (error.code === 'AUTH_CONNECTION_BLOCKED' || error.code === 'AUTH_SESSION_BLOCKED') {
         setBlockedCredentials(credentials);
       } else notify(error.message, 'error');
+    } finally { setIsSubmitting(false); }
+  }
+
+  async function retryAuthentication() {
+    setIsSubmitting(true);
+    try {
+      const isReady = await checkAuthEnvironment();
+      setAuthEnvironmentChecked(true);
+      setAuthEnvironmentBlocked(!isReady);
+      if (!isReady) return;
+      const credentials = blockedCredentials;
+      setBlockedCredentials(null);
+      if (credentials) await submitCredentials(credentials, true);
+    } catch {
+      setAuthEnvironmentChecked(true);
+      setAuthEnvironmentBlocked(true);
     } finally { setIsSubmitting(false); }
   }
 
@@ -81,7 +118,7 @@ function AuthPage({ mode }) {
             {isRegister && <label>Nombre<input type="text" name="name" autoComplete="name" placeholder="Tu nombre" /></label>}
             <label>Correo electrónico<input type="email" name="email" autoComplete="email" placeholder="tu@correo.com" required /></label>
             <label>Contraseña<input type="password" name="password" autoComplete={isRegister ? 'new-password' : 'current-password'} placeholder="••••••••" required /></label>
-            <button className="btn btn--primary btn--md" type="submit" disabled={isSubmitting}>{isRegister ? 'Crear cuenta' : 'Iniciar sesión'}</button>
+            <button className="btn btn--primary btn--md" type="submit" disabled={isSubmitting || !authEnvironmentChecked}>{isRegister ? 'Crear cuenta' : 'Iniciar sesión'}</button>
           </form>
           {verificationMessage && <p role="status">{verificationMessage}</p>}
           {!window.__TAURI_INTERNALS__ && window.location.protocol !== 'tauri:' && window.location.hostname !== 'tauri.local' && <>
@@ -101,14 +138,14 @@ function AuthPage({ mode }) {
           )}
         </div>
       </section>
-      {blockedCredentials && <div className="auth-blocked-backdrop" role="presentation">
+      {authEnvironmentBlocked && <div className="auth-blocked-backdrop" role="presentation">
         <section className="auth-blocked-modal" role="dialog" aria-modal="true" aria-labelledby="auth-blocked-title">
           <div className="auth-blocked-modal__icon" aria-hidden="true">!</div>
           <h2 id="auth-blocked-title">Brave está bloqueando la autenticación</h2>
           <p>Brave Shields puede impedir la conexión con el servidor o bloquear la cookie de sesión. Baja Shields para este sitio y vuelve a intentarlo.</p>
           <div className="auth-blocked-modal__actions">
             <button className="btn btn--secondary btn--sm" type="button" onClick={() => setBlockedCredentials(null)}>Cerrar</button>
-            <button className="btn btn--primary btn--sm" type="button" onClick={() => { const credentials = blockedCredentials; setBlockedCredentials(null); submitCredentials(credentials); }}>Reintentar</button>
+            <button className="btn btn--primary btn--sm" type="button" disabled={isSubmitting} onClick={retryAuthentication}>Reintentar</button>
           </div>
         </section>
       </div>}
