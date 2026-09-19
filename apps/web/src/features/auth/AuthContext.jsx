@@ -16,7 +16,13 @@ export function AuthProvider({ children }) {
       error.code = 'AUTH_CONNECTION_BLOCKED';
       throw error;
     }
-    const result = await response.json();
+    let result;
+    try {
+      result = await response.json();
+    } catch (error) {
+      error.code = 'AUTH_CONNECTION_BLOCKED';
+      throw error;
+    }
     if (!response.ok) throw new Error(result.message || 'Authentication failed');
     if (result.verificationRequired) return result;
     setUser(result.user); setIsAuthenticated(true); return result.user;
